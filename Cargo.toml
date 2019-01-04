@@ -1,0 +1,7 @@
+[package]
+name = "bc-algo"
+version = "0.1.0"
+authors = ["fanhui <hui.fan@mail.ru>"]
+edition = "2018"
+
+[dependencies]
