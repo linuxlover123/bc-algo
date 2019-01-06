@@ -1,3 +1,8 @@
+mod data_structure;
+mod p2p_routing;
+mod consensus;
+mod other;
+
 #[cfg(test)]
 mod tests {
     #[test]

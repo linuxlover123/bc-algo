@@ -40,8 +40,10 @@ impl List {
 
 #[cfg(test)]
 mod tests {
-#[test]
-    fn ttt() {
+    use super::*;
+
+    #[test]
+    fn test() {
         let mut list = List::new();
         for x in 0..10000 {
             list = list.prepend(x);
