@@ -27,7 +27,7 @@ impl<T: Clone + Display> List<T> {
         }
     }
 
-    // 正向追加节点
+    // 前向追加节点
     pub fn prevadd(&mut self, data: T) {
         self.len += 1;
         self.header = Rc::new(RefCell::new(Node::Obj(data, Rc::clone(&self.header))));
@@ -38,7 +38,7 @@ impl<T: Clone + Display> List<T> {
         }
     }
 
-    // 反向追加节点
+    // 后向追加节点
     pub fn backadd(&mut self, data: T) {
         if 0 == self.len {
             self.prevadd(data);
@@ -58,13 +58,45 @@ impl<T: Clone + Display> List<T> {
     }
 
     // 弹出最前面的节点
-    pub fn prevpop(&mut self) -> T {
-        unimplemented!();
+    pub fn prevpop(&mut self) -> Option<T> {
+        if 0 == self.len {
+            return None;
+        } else {
+            self.len -= 1;
+
+            let keep = Rc::clone(&self.header);
+            let res;
+            if let Node::Obj(data, ref p) = *keep.borrow() {
+                res = data;
+                self.header = Rc::clone(p);
+            } else {
+                panic!("BUG!");
+            }
+
+            let _ = keep;
+            return res;
+        }
     }
 
     // 弹出最后面的节点
-    pub fn backpop(&mut self) -> T {
-        unimplemented!();
+    pub fn backpop(&mut self) -> Option<T> {
+        if 0 == self.len {
+            return None;
+        } else {
+            self.len -= 1;
+
+            let keep = Rc::clone(&self.tail);
+            let res;
+            if let Node::Obj(data, ref p) = *keep.borrow() {
+                res = data;
+                //self.tail = Rc::clone(p);
+            } else {
+                panic!("BUG!");
+            }
+
+            let _ = keep;
+            return res;
+        }
     }
 
     pub fn len(&self) -> SizType {
@@ -102,12 +134,12 @@ mod tests {
         }
         assert_eq!(list.len, 200);
 
-        //assert_eq!(99, list.prevpop());
-        //assert_eq!(98, list.prevpop());
-        //assert_eq!(97, list.prevpop());
-        //assert_eq!(-100, list.backpop());
-        //assert_eq!(-99, list.backpop());
-        //assert_eq!(-99, list.backpop());
+        assert_eq!(99, list.prevpop().unwrap());
+        assert_eq!(98, list.prevpop().unwrap());
+        assert_eq!(97, list.prevpop().unwrap());
+        assert_eq!(-100, list.backpop().unwrap());
+        assert_eq!(-99, list.backpop().unwrap());
+        assert_eq!(-99, list.backpop().unwrap());
 
         println!("{}", list.stringify());
     }
