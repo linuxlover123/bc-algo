@@ -1,25 +1,25 @@
 use std::{
     rc::Rc,
-    cell::RefCell
+    cell::RefCell,
+    fmt::Display,
 };
 
-type SizeT=u64;
-type DataT=i32;
+type SizType=u64;
 
-struct List {
-    len: SizeT ,
-    header: Rc<RefCell<Node>>,
-    tail: Rc<RefCell<Node>>,
+struct List<T: Clone + Display> {
+    len: SizType ,
+    header: Rc<RefCell<Node<T>>>,
+    tail: Rc<RefCell<Node<T>>>,
 }
 
 #[derive(Clone)]
-enum Node {
+enum Node<T: Clone + Display> {
     Nil,
-    Obj(DataT, Rc<RefCell<Node>>),
+    Obj(T, Rc<RefCell<Node<T>>>),
 }
 
-impl List {
-    pub fn new() -> List {
+impl<T: Clone + Display> List<T> {
+    pub fn new() -> List<T> {
         List {
             len: 0,
             header: Rc::new(RefCell::new(Node::Nil)),
@@ -28,7 +28,7 @@ impl List {
     }
 
     // 正向追加节点
-    pub fn prevadd(&mut self, data: DataT) {
+    pub fn prevadd(&mut self, data: T) {
         self.len += 1;
         self.header = Rc::new(RefCell::new(Node::Obj(data, Rc::clone(&self.header))));
 
@@ -39,7 +39,7 @@ impl List {
     }
 
     // 反向追加节点
-    pub fn backadd(&mut self, data: DataT) {
+    pub fn backadd(&mut self, data: T) {
         if 0 == self.len {
             self.prevadd(data);
         } else {
@@ -58,16 +58,16 @@ impl List {
     }
 
     // 弹出最前面的节点
-    pub fn prevpop(&mut self) -> DataT {
+    pub fn prevpop(&mut self) -> T {
         unimplemented!();
     }
 
     // 弹出最后面的节点
-    pub fn backpop(&mut self) -> DataT {
+    pub fn backpop(&mut self) -> T {
         unimplemented!();
     }
 
-    pub fn len(&self) -> SizeT {
+    pub fn len(&self) -> SizType {
         self.len
     }
 
