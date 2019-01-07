@@ -3,11 +3,5 @@
 /// - 单哈希
 /// - 多哈希
 
-
-#[cfg(test)]
-mod test {
-    #[test]
-    fn test() {
-
-    }
-}
+mod single_hash;
+mod multi_hash;

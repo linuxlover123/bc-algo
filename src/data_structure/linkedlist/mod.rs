@@ -5,11 +5,3 @@
 
 mod one_way;
 mod two_way;
-
-#[cfg(test)]
-mod test {
-    #[test]
-    fn test() {
-        assert!(true);
-    }
-}

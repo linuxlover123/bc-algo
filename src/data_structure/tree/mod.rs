@@ -9,11 +9,11 @@
 /// - B Tree
 /// - B+ Tree
 
-
-#[cfg(test)]
-mod test {
-    #[test]
-    fn test() {
-        assert_ne!(1, 2);
-    }
-}
+mod merkle;
+mod sorted_merkle;
+mod trie;
+mod mpt;
+mod avl;
+mod red_black;
+mod b;
+mod bplus;
