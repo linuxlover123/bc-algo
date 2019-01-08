@@ -1,1 +1,1 @@
-mod ethereum_rlp;
+pub mod ethereum_rlp;

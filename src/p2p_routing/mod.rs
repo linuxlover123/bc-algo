@@ -1,3 +1,3 @@
-mod kademlia;
-mod s_kademlia;
-mod coral;
+pub mod kademlia;
+pub mod s_kademlia;
+pub mod coral;
