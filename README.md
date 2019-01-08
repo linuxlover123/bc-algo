@@ -32,17 +32,18 @@
 - [ ] skip list
 
 #### bloom filter
-- [ ] single hash
-- [ ] multi hash
+- [ ] single hash bloom filter
+- [ ] multi hash bloom filter
 
-#### consensus
-- [ ] bitcoin POW
-- [ ] raft
+#### serialize and deserialize
+- [ ] ethereum RLP
 
-#### P2P routing
+#### P2P routing algorithms
 - [ ] kademlia
 - [ ] S/kademlia
 - [ ] coral
 
-#### serialize and deserialize
-- [ ] ethereum RLP
+#### consensus algorithms
+- [ ] bitcoin POW
+- [ ] ethereum POW
+- [ ] raft
