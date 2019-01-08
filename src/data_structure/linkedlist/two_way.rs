@@ -1,80 +1,93 @@
 use std::{
-    rc::Rc,
-    cell::RefCell,
     fmt::Display,
+    ptr,
 };
 
 type SizType=u64;
 
 struct List<T: Clone + Display> {
     len: SizType ,
-    header: Rc<RefCell<Node<T>>>,
-    tail: Rc<RefCell<Node<T>>>,
+    head: *mut Node<T>,
+    tail: *mut Node<T>,
 }
 
 #[derive(Clone)]
-enum Node<T: Clone + Display> {
-    Nil,
-    Obj(T, Rc<RefCell<Node<T>>>),
+struct Node<T: Clone + Display> {
+    data: T,
+    prev: *mut Node<T>,
+    back: *mut Node<T>,
 }
 
 impl<T: Clone + Display> List<T> {
     pub fn new() -> List<T> {
         List {
             len: 0,
-            header: Rc::new(RefCell::new(Node::Nil)),
-            tail: Rc::new(RefCell::new(Node::Nil)),
+            head: ptr::null_mut(),
+            tail: ptr::null_mut(),
         }
     }
 
     // 前向追加节点
     pub fn prevadd(&mut self, data: T) {
-        self.len += 1;
-        self.header = Rc::new(RefCell::new(Node::Obj(data, Rc::clone(&self.header))));
+        let new = Box::into_raw(Box::new(
+            Node{
+                data,
+                prev: ptr::null_mut(),
+                back: self.head, 
+            }));
 
-        // optimize to execute once lazily?
-        if 1 == self.len {
-            self.tail = Rc::clone(&self.header);
+        if 0 == self.len {
+            self.tail = new;
+            self.head = new;
+        } else {
+            unsafe { (*self.head).prev = new; }
+            self.head = new;
         }
+
+        self.len += 1;
     }
 
     // 后向追加节点
     pub fn backadd(&mut self, data: T) {
+        let new = Box::into_raw(Box::new(
+            Node{
+                data,
+                prev: self.tail, 
+                back: ptr::null_mut(),
+            }));
+
         if 0 == self.len {
-            self.prevadd(data);
+            self.tail = new;
+            self.head = new;
         } else {
-            self.len += 1;
-
-            let keep = Rc::clone(&self.tail);
-            if let Node::Obj(_, ref p) = *keep.borrow() {
-                *p.borrow_mut() = Node::Obj(data, Rc::new(RefCell::new(Node::Nil)));
-                self.tail = Rc::clone(p);
-            } else {
-                panic!("BUG!");
-            }
-
-            let _ = keep;
+            unsafe { (*self.tail).back = new };
+            self.tail = new;
         }
+
+        self.len += 1;
     }
 
     // 弹出最前面的节点
     pub fn prevpop(&mut self) -> Option<T> {
         if 0 == self.len {
             return None;
-        } else {
+        } else if 1 == self.len {
+            let keep = self.head;
+
             self.len -= 1;
+            self.head = ptr::null_mut();
+            self.tail = ptr::null_mut();
 
-            let keep = Rc::clone(&self.header);
-            let res;
-            if let Node::Obj(data, ref p) = *keep.borrow() {
-                res = data;
-                self.header = Rc::clone(p);
-            } else {
-                panic!("BUG!");
-            }
+            unsafe { return Some(Box::<Node<T>>::from_raw(keep).data); }
+        } else {
+            let keep = self.head;
 
-            let _ = keep;
-            return res;
+            self.len -= 1;
+            unsafe {
+                self.head = (*keep).back;
+                (*self.head).prev = ptr::null_mut();
+                return Some(Box::<Node<T>>::from_raw(keep).data);
+            };
         }
     }
 
@@ -82,20 +95,23 @@ impl<T: Clone + Display> List<T> {
     pub fn backpop(&mut self) -> Option<T> {
         if 0 == self.len {
             return None;
-        } else {
+        } else if 1 == self.len {
+            let keep = self.tail;
+
             self.len -= 1;
+            self.head = ptr::null_mut();
+            self.tail = ptr::null_mut();
 
-            let keep = Rc::clone(&self.tail);
-            let res;
-            if let Node::Obj(data, ref p) = *keep.borrow() {
-                res = data;
-                //self.tail = Rc::clone(p);
-            } else {
-                panic!("BUG!");
-            }
+            unsafe { return Some(Box::<Node<T>>::from_raw(keep).data); }
+        } else {
+            let keep = self.tail;
 
-            let _ = keep;
-            return res;
+            self.len -= 1;
+            unsafe {
+                self.tail = (*keep).prev;
+                (*self.tail).back = ptr::null_mut();
+                return Some(Box::<Node<T>>::from_raw(keep).data);
+            };
         }
     }
 
@@ -106,10 +122,13 @@ impl<T: Clone + Display> List<T> {
     pub fn stringify(&self) -> String {
         let mut res = String::new();
 
-        let mut p = Rc::clone(&self.header).borrow().clone();
-        while let Node::Obj(node, next) = p {
-            res.push_str(&format!("{}==>", node));
-            p = Rc::clone(&next).borrow().clone();
+        let mut p = self.tail;
+        for _ in 0..self.len {
+            unsafe {
+                let Node{data, prev, back: _} = *Box::<Node<T>>::from_raw(p);
+                res.push_str(&format!("{}==>", data));
+                p = prev;
+            }
         }
 
         res.push_str(&format!("Nil"));
@@ -139,7 +158,7 @@ mod tests {
         assert_eq!(97, list.prevpop().unwrap());
         assert_eq!(-100, list.backpop().unwrap());
         assert_eq!(-99, list.backpop().unwrap());
-        assert_eq!(-99, list.backpop().unwrap());
+        assert_eq!(-98, list.backpop().unwrap());
 
         println!("{}", list.stringify());
     }
