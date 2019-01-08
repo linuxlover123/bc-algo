@@ -44,5 +44,5 @@
 - [ ] S/kademlia
 - [ ] coral
 
-#### serilize and deserilize
+#### serialize and deserialize
 - [ ] ethereum RLP
