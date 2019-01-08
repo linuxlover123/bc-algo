@@ -69,7 +69,7 @@ impl<T: Clone + Display> OneWayLinkedList<T> {
         self.len
     }
 
-    /// 按**从新到旧**的顺序依次打印每个节点的值。
+    /// 按 **从新到旧** 的顺序依次打印每个节点的值。
     pub fn stringify(&self) -> String {
         let mut res = String::new();
 

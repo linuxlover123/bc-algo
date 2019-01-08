@@ -126,7 +126,7 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
         self.len
     }
 
-    /// 按**prev ==> back**的顺序依次打印每个节点的值。
+    /// 按 **prev ==> back** 的顺序依次打印每个节点的值。
     pub fn stringify(&self) -> String {
         let mut res = String::new();
 
