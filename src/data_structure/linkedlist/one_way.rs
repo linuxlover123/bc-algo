@@ -1,3 +1,6 @@
+//! ## 单向链表
+//! 多数区块链项目采用单向链表作为其核心数据结构。
+
 use std::{
     fmt::Display,
     ptr,
@@ -5,11 +8,13 @@ use std::{
 
 type SizType=u64;
 
+/// 链结构。
 pub struct OneWayLinkedList<T: Clone + Display> {
     len: SizType ,
     head: *mut Node<T>,
 }
 
+/// 节点结构。
 #[derive(Clone)]
 struct Node<T: Clone + Display> {
     data: T,
@@ -17,6 +22,7 @@ struct Node<T: Clone + Display> {
 }
 
 impl<T: Clone + Display> OneWayLinkedList<T> {
+    /// 初始化一个新链表。
     pub fn new() -> OneWayLinkedList<T> {
         OneWayLinkedList {
             len: 0,
@@ -24,7 +30,7 @@ impl<T: Clone + Display> OneWayLinkedList<T> {
         }
     }
 
-    // 追加节点
+    /// 向链表中添加一个节点。
     pub fn add(&mut self, data: T) {
         let new = Box::into_raw(Box::new(
             Node{
@@ -36,7 +42,7 @@ impl<T: Clone + Display> OneWayLinkedList<T> {
         self.len += 1;
     }
 
-    // 弹出最新的节点
+    /// 删除最新的节点，并返回其值；若链表为空，则返回 None。
     pub fn pop(&mut self) -> Option<T> {
         if 0 == self.len {
             return None;
@@ -58,10 +64,12 @@ impl<T: Clone + Display> OneWayLinkedList<T> {
         }
     }
 
+    /// 返回链表中所有节点的个数。
     pub fn len(&self) -> SizType {
         self.len
     }
 
+    /// 按**从新到旧**的顺序依次打印每个节点的值。
     pub fn stringify(&self) -> String {
         let mut res = String::new();
 

@@ -1,3 +1,6 @@
+//! ## 双向链表
+//! 具备双向索引能力的链表。
+
 use std::{
     fmt::Display,
     ptr,
@@ -5,12 +8,14 @@ use std::{
 
 type SizType=u64;
 
+/// 链结构。
 pub struct TwoWayLinkedList<T: Clone + Display> {
     len: SizType ,
     head: *mut Node<T>,
     tail: *mut Node<T>,
 }
 
+/// 节点结构。
 #[derive(Clone)]
 struct Node<T: Clone + Display> {
     data: T,
@@ -19,6 +24,7 @@ struct Node<T: Clone + Display> {
 }
 
 impl<T: Clone + Display> TwoWayLinkedList<T> {
+    /// 初始化一个新链表。
     pub fn new() -> TwoWayLinkedList<T> {
         TwoWayLinkedList {
             len: 0,
@@ -27,7 +33,7 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
         }
     }
 
-    // 前向追加节点
+    /// 前向追加节点。
     pub fn prevadd(&mut self, data: T) {
         let new = Box::into_raw(Box::new(
             Node{
@@ -47,7 +53,7 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
         self.len += 1;
     }
 
-    // 后向追加节点
+    /// 后向追加节点。
     pub fn backadd(&mut self, data: T) {
         let new = Box::into_raw(Box::new(
             Node{
@@ -67,7 +73,7 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
         self.len += 1;
     }
 
-    // 弹出最前面的节点
+    /// 弹出最前面的节点。
     pub fn prevpop(&mut self) -> Option<T> {
         if 0 == self.len {
             return None;
@@ -91,7 +97,7 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
         }
     }
 
-    // 弹出最后面的节点
+    /// 弹出最后面的节点。
     pub fn backpop(&mut self) -> Option<T> {
         if 0 == self.len {
             return None;
@@ -115,10 +121,12 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
         }
     }
 
+    /// 返回链表中所有节点的个数。
     pub fn len(&self) -> SizType {
         self.len
     }
 
+    /// 按**prev ==> back**的顺序依次打印每个节点的值。
     pub fn stringify(&self) -> String {
         let mut res = String::new();
 
