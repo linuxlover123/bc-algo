@@ -159,6 +159,7 @@ mod tests {
         assert_eq!(-100, list.backpop().unwrap());
         assert_eq!(-99, list.backpop().unwrap());
         assert_eq!(-98, list.backpop().unwrap());
+        assert_eq!(list.len, 194);
 
         println!("{}", list.stringify());
     }

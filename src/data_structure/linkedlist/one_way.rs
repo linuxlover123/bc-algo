@@ -1,101 +1,60 @@
 use std::{
-    rc::Rc,
-    cell::RefCell,
     fmt::Display,
+    ptr,
 };
 
 type SizType=u64;
 
 struct List<T: Clone + Display> {
     len: SizType ,
-    header: Rc<RefCell<Node<T>>>,
-    tail: Rc<RefCell<Node<T>>>,
+    head: *mut Node<T>,
 }
 
 #[derive(Clone)]
-enum Node<T: Clone + Display> {
-    Nil,
-    Obj(T, Rc<RefCell<Node<T>>>),
+struct Node<T: Clone + Display> {
+    data: T,
+    back: *mut Node<T>,
 }
 
 impl<T: Clone + Display> List<T> {
     pub fn new() -> List<T> {
         List {
             len: 0,
-            header: Rc::new(RefCell::new(Node::Nil)),
-            tail: Rc::new(RefCell::new(Node::Nil)),
+            head: ptr::null_mut(),
         }
     }
 
-    // 前向追加节点
-    pub fn prevadd(&mut self, data: T) {
+    // 追加节点
+    pub fn add(&mut self, data: T) {
+        let new = Box::into_raw(Box::new(
+            Node{
+                data,
+                back: self.head, 
+            }));
+
+        self.head = new;
         self.len += 1;
-        self.header = Rc::new(RefCell::new(Node::Obj(data, Rc::clone(&self.header))));
-
-        // optimize to execute once lazily?
-        if 1 == self.len {
-            self.tail = Rc::clone(&self.header);
-        }
     }
 
-    // 后向追加节点
-    pub fn backadd(&mut self, data: T) {
-        if 0 == self.len {
-            self.prevadd(data);
-        } else {
-            self.len += 1;
-
-            let keep = Rc::clone(&self.tail);
-            if let Node::Obj(_, ref p) = *keep.borrow() {
-                *p.borrow_mut() = Node::Obj(data, Rc::new(RefCell::new(Node::Nil)));
-                self.tail = Rc::clone(p);
-            } else {
-                panic!("BUG!");
-            }
-
-            let _ = keep;
-        }
-    }
-
-    // 弹出最前面的节点
-    pub fn prevpop(&mut self) -> Option<T> {
+    // 弹出最新的节点
+    pub fn pop(&mut self) -> Option<T> {
         if 0 == self.len {
             return None;
-        } else {
+        } else if 1 == self.len {
+            let keep = self.head;
+
             self.len -= 1;
+            self.head = ptr::null_mut();
 
-            let keep = Rc::clone(&self.header);
-            let res;
-            if let Node::Obj(data, ref p) = *keep.borrow() {
-                res = data;
-                self.header = Rc::clone(p);
-            } else {
-                panic!("BUG!");
-            }
-
-            let _ = keep;
-            return res;
-        }
-    }
-
-    // 弹出最后面的节点
-    pub fn backpop(&mut self) -> Option<T> {
-        if 0 == self.len {
-            return None;
+            unsafe { return Some(Box::<Node<T>>::from_raw(keep).data); }
         } else {
+            let keep = self.head;
+
             self.len -= 1;
-
-            let keep = Rc::clone(&self.tail);
-            let res;
-            if let Node::Obj(data, ref p) = *keep.borrow() {
-                res = data;
-                //self.tail = Rc::clone(p);
-            } else {
-                panic!("BUG!");
-            }
-
-            let _ = keep;
-            return res;
+            unsafe {
+                self.head = (*keep).back;
+                return Some(Box::<Node<T>>::from_raw(keep).data);
+            };
         }
     }
 
@@ -106,10 +65,13 @@ impl<T: Clone + Display> List<T> {
     pub fn stringify(&self) -> String {
         let mut res = String::new();
 
-        let mut p = Rc::clone(&self.header).borrow().clone();
-        while let Node::Obj(node, next) = p {
-            res.push_str(&format!("{}==>", node));
-            p = Rc::clone(&next).borrow().clone();
+        let mut p = self.head;
+        for _ in 0..self.len {
+            unsafe {
+                let Node{data, back} = *Box::<Node<T>>::from_raw(p);
+                res.push_str(&format!("{}==>", data));
+                p = back;
+            }
         }
 
         res.push_str(&format!("Nil"));
@@ -125,21 +87,20 @@ mod tests {
     fn test() {
         let mut list = List::new();
         for x in 0..=99 {
-            list.prevadd(x);
+            list.add(x);
         }
         assert_eq!(list.len, 100);
 
-        for x in 1..=100 {
-            list.backadd(-x);
-        }
-        assert_eq!(list.len, 200);
+        assert_eq!(Some(99), list.pop());
+        assert_eq!(Some(98), list.pop());
+        assert_eq!(Some(97), list.pop());
+        assert_eq!(list.len, 97);
 
-        assert_eq!(99, list.prevpop().unwrap());
-        assert_eq!(98, list.prevpop().unwrap());
-        assert_eq!(97, list.prevpop().unwrap());
-        assert_eq!(-100, list.backpop().unwrap());
-        assert_eq!(-99, list.backpop().unwrap());
-        assert_eq!(-99, list.backpop().unwrap());
+        for x in 0..97 {
+            assert_eq!(Some(96 - x), list.pop());
+        }
+        assert_eq!(list.len, 0);
+        assert_eq!(None, list.pop());
 
         println!("{}", list.stringify());
     }

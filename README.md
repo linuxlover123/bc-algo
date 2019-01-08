@@ -9,5 +9,5 @@
 > 但**不苛求语言层面的优化**（如：基于标准库而不是 core 库等）。    
 > 正所谓“光说不练假把式”，看十个别人的算法实现，不如自己亲手实现一个！    
 
-- [ ] one-way linkedlist
+- [x] one-way linkedlist
 - [x] two-way linkedlist
