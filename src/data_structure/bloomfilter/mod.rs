@@ -3,5 +3,5 @@
 /// - 单哈希
 /// - 多哈希
 
-mod single_hash;
-mod multi_hash;
+pub mod single_hash;
+pub mod multi_hash;

@@ -6,8 +6,8 @@
 /// - 简单网
 /// - 复杂网
 
-mod dag;
-mod skiplist;
-mod simple_graph;
-mod simple_net;
-mod complex_net;
+pub mod dag;
+pub mod skiplist;
+pub mod simple_graph;
+pub mod simple_net;
+pub mod complex_net;

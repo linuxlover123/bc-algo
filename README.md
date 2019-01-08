@@ -20,7 +20,6 @@ cargo doc --open
 - [x] two-way linkedlist
 
 #### tree
-- [ ] binary tree
 - [ ] AVL tree
 - [ ] red-black tree
 - [ ] merkle tree
@@ -31,11 +30,11 @@ cargo doc --open
 - [ ] B+ tree
 
 #### graph
+- [ ] DAG
+- [ ] skip list
 - [ ] base graph
 - [ ] base net
 - [ ] complex net
-- [ ] DAG
-- [ ] skip list
 
 #### bloom filter
 - [ ] single hash bloom filter

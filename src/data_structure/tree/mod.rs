@@ -9,11 +9,11 @@
 /// - B Tree
 /// - B+ Tree
 
-mod merkle;
-mod sorted_merkle;
-mod trie;
-mod mpt;
-mod avl;
-mod red_black;
-mod b;
-mod bplus;
+pub mod merkle;
+pub mod sorted_merkle;
+pub mod trie;
+pub mod mpt;
+pub mod avl;
+pub mod red_black;
+pub mod b;
+pub mod bplus;
