@@ -5,7 +5,7 @@ use std::{
 
 type SizType=u64;
 
-struct List<T: Clone + Display> {
+pub struct OneWayLinkedList<T: Clone + Display> {
     len: SizType ,
     head: *mut Node<T>,
 }
@@ -16,9 +16,9 @@ struct Node<T: Clone + Display> {
     back: *mut Node<T>,
 }
 
-impl<T: Clone + Display> List<T> {
-    pub fn new() -> List<T> {
-        List {
+impl<T: Clone + Display> OneWayLinkedList<T> {
+    pub fn new() -> OneWayLinkedList<T> {
+        OneWayLinkedList {
             len: 0,
             head: ptr::null_mut(),
         }
@@ -85,7 +85,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut list = List::new();
+        let mut list = OneWayLinkedList::new();
         for x in 0..=99 {
             list.add(x);
         }

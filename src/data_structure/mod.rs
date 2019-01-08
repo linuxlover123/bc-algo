@@ -1,4 +1,4 @@
-mod bloomfilter;
-mod graph;
-mod linkedlist;
-mod tree;
+pub mod bloomfilter;
+pub mod graph;
+pub mod linkedlist;
+pub mod tree;

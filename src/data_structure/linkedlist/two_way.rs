@@ -5,7 +5,7 @@ use std::{
 
 type SizType=u64;
 
-struct List<T: Clone + Display> {
+pub struct TwoWayLinkedList<T: Clone + Display> {
     len: SizType ,
     head: *mut Node<T>,
     tail: *mut Node<T>,
@@ -18,9 +18,9 @@ struct Node<T: Clone + Display> {
     back: *mut Node<T>,
 }
 
-impl<T: Clone + Display> List<T> {
-    pub fn new() -> List<T> {
-        List {
+impl<T: Clone + Display> TwoWayLinkedList<T> {
+    pub fn new() -> TwoWayLinkedList<T> {
+        TwoWayLinkedList {
             len: 0,
             head: ptr::null_mut(),
             tail: ptr::null_mut(),
@@ -142,7 +142,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut list = List::new();
+        let mut list = TwoWayLinkedList::new();
         for x in 0..=99 {
             list.prevadd(x);
         }

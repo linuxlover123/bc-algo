@@ -3,5 +3,5 @@
 /// - 单向链表
 /// - 双向链表
 
-mod one_way;
-mod two_way;
+pub mod one_way;
+pub mod two_way;
