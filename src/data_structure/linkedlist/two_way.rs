@@ -1,16 +1,13 @@
 //! ## 双向链表
 //! 具备双向索引能力的链表。
 
-use std::{
-    fmt::Display,
-    ptr,
-};
+use std::{fmt::Display, ptr};
 
-type SizType=u64;
+type SizType = u64;
 
 /// 链结构。
 pub struct TwoWayLinkedList<T: Clone + Display> {
-    len: SizType ,
+    len: SizType,
     head: *mut Node<T>,
     tail: *mut Node<T>,
 }
@@ -35,18 +32,19 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
 
     /// 前向追加节点。
     pub fn prevadd(&mut self, data: T) {
-        let new = Box::into_raw(Box::new(
-            Node{
-                data,
-                prev: ptr::null_mut(),
-                back: self.head, 
-            }));
+        let new = Box::into_raw(Box::new(Node {
+            data,
+            prev: ptr::null_mut(),
+            back: self.head,
+        }));
 
         if 0 == self.len {
             self.tail = new;
             self.head = new;
         } else {
-            unsafe { (*self.head).prev = new; }
+            unsafe {
+                (*self.head).prev = new;
+            }
             self.head = new;
         }
 
@@ -55,12 +53,11 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
 
     /// 后向追加节点。
     pub fn backadd(&mut self, data: T) {
-        let new = Box::into_raw(Box::new(
-            Node{
-                data,
-                prev: self.tail, 
-                back: ptr::null_mut(),
-            }));
+        let new = Box::into_raw(Box::new(Node {
+            data,
+            prev: self.tail,
+            back: ptr::null_mut(),
+        }));
 
         if 0 == self.len {
             self.tail = new;
@@ -84,7 +81,9 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
             self.head = ptr::null_mut();
             self.tail = ptr::null_mut();
 
-            unsafe { return Some(Box::<Node<T>>::from_raw(keep).data); }
+            unsafe {
+                return Some(Box::<Node<T>>::from_raw(keep).data);
+            }
         } else {
             let keep = self.head;
 
@@ -108,7 +107,9 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
             self.head = ptr::null_mut();
             self.tail = ptr::null_mut();
 
-            unsafe { return Some(Box::<Node<T>>::from_raw(keep).data); }
+            unsafe {
+                return Some(Box::<Node<T>>::from_raw(keep).data);
+            }
         } else {
             let keep = self.tail;
 
@@ -133,7 +134,11 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
         let mut p = self.tail;
         for _ in 0..self.len {
             unsafe {
-                let Node{data, prev, back: _} = *Box::<Node<T>>::from_raw(p);
+                let Node {
+                    data,
+                    prev,
+                    back: _,
+                } = *Box::<Node<T>>::from_raw(p);
                 res.push_str(&format!("{}==>", data));
                 p = prev;
             }

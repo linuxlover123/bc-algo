@@ -1,6 +1,5 @@
 /// ## kademlia P2P routing
 
-
 #[cfg(test)]
 mod tests {
     #[test]

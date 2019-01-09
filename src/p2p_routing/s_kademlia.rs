@@ -1,7 +1,6 @@
 /// ## kademlia P2P routing
 /// - S/KAD 路由算法
 
-
 #[cfg(test)]
 mod tests {
     #[test]

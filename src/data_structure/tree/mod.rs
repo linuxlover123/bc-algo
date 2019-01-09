@@ -1,3 +1,6 @@
+pub mod avl;
+pub mod b;
+pub mod bplus;
 /// ## tree
 /// #### 树
 /// - merkle tree
@@ -8,12 +11,8 @@
 /// - Red Black Tree
 /// - B Tree
 /// - B+ Tree
-
 pub mod merkle;
+pub mod mpt;
+pub mod red_black;
 pub mod sorted_merkle;
 pub mod trie;
-pub mod mpt;
-pub mod avl;
-pub mod red_black;
-pub mod b;
-pub mod bplus;

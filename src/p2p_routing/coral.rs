@@ -1,7 +1,6 @@
 /// ## coral P2P routing for CDN
 /// - coral P2P-CDN 路由算法
 
-
 #[cfg(test)]
 mod tests {
     #[test]

@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies-dev]
 lazy_static = "1.2.0"
+rand = "0.6.4"

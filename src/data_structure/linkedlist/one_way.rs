@@ -1,16 +1,13 @@
 //! ## 单向链表
 //! 多数区块链项目采用单向链表作为其核心数据结构。
 
-use std::{
-    fmt::Display,
-    rc::Rc,
-};
+use std::{fmt::Display, rc::Rc};
 
-type SizType=u64;
+type SizType = u64;
 
 /// 链结构。
 pub struct OneWayLinkedList<T: Clone + Display> {
-    len: SizType ,
+    len: SizType,
     head: Option<Rc<Node<T>>>,
 }
 
@@ -24,19 +21,15 @@ struct Node<T: Clone + Display> {
 impl<T: Clone + Display> OneWayLinkedList<T> {
     /// 初始化一个新链表。
     pub fn new() -> OneWayLinkedList<T> {
-        OneWayLinkedList {
-            len: 0,
-            head: None 
-        }
+        OneWayLinkedList { len: 0, head: None }
     }
 
     /// 向链表中添加一个节点。
     pub fn add(&mut self, data: T) {
-        let new = Some(Rc::new(
-            Node{
-                data: data.clone(),
-                back: self.head.as_ref().map(|h|Rc::clone(h)), 
-            }));
+        let new = Some(Rc::new(Node {
+            data: data.clone(),
+            back: self.head.as_ref().map(|h| Rc::clone(h)),
+        }));
 
         self.head = new;
         self.len += 1;
@@ -57,7 +50,9 @@ impl<T: Clone + Display> OneWayLinkedList<T> {
             let keep = Rc::clone(self.head.as_ref().unwrap());
 
             self.len -= 1;
-            self.head.as_mut().map(|h|Rc::clone(h.back.as_ref().unwrap()));
+            self.head.as_mut().map(|h| {
+                *h = Rc::clone(h.back.as_ref().unwrap());
+            });
             return Some((*keep).data.clone());
         }
     }
@@ -71,14 +66,17 @@ impl<T: Clone + Display> OneWayLinkedList<T> {
     pub fn stringify(&self) -> String {
         let mut res = String::new();
 
-        let mut p = Rc::clone(self.head.as_ref().unwrap());
-        for _ in 0..self.len {
-            let Node{data: ref d, back: ref b} = *p;
+        let mut p = self.head.as_ref();
+        while let Some(n) = p {
+            let Node {
+                data: ref d,
+                back: ref b,
+            } = **n;
             res.push_str(&format!("{}==>", d));
-            p = Rc::clone(b.as_ref().unwrap());
+            p = b.as_ref();
         }
-
         res.push_str(&format!("Nil"));
+
         res
     }
 }
@@ -106,6 +104,9 @@ mod tests {
         assert_eq!(list.len, 0);
         assert_eq!(None, list.pop());
 
+        for x in 0..=9 {
+            list.add(x);
+        }
         println!("{}", list.stringify());
     }
 }
