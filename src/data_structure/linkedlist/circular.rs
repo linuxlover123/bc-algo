@@ -1,20 +1,21 @@
-//! ## 双向链表
+//! ## 循环链表
 //!
 //! #### 属性
 //! - <font color=Green>√</font> 多线程安全
 //! - <font color=Green>√</font> 无 unsafe 代码
 //!
 //! #### 说明
-//! - 具备双向索引能力的链表。
+//! - 头尾相接的双向链表。
 //!
 //! #### 应用场景
+//! - 定长缓存队列
 
 use std::{fmt::Display, ptr};
 
 type SizType = u64;
 
 /// 链结构。
-pub struct TwoWayLinkedList<T: Clone + Display> {
+pub struct CircularLinkedList<T: Clone + Display> {
     len: SizType,
     head: *mut Node<T>,
     tail: *mut Node<T>,
@@ -28,10 +29,10 @@ struct Node<T: Clone + Display> {
     back: *mut Node<T>,
 }
 
-impl<T: Clone + Display> TwoWayLinkedList<T> {
+impl<T: Clone + Display> CircularLinkedList<T> {
     /// 初始化一个新链表。
-    pub fn new() -> TwoWayLinkedList<T> {
-        TwoWayLinkedList {
+    pub fn new() -> CircularLinkedList<T> {
+        CircularLinkedList {
             len: 0,
             head: ptr::null_mut(),
             tail: ptr::null_mut(),
@@ -163,7 +164,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let mut list = TwoWayLinkedList::new();
+        let mut list = CircularLinkedList::new();
         for x in 0..=99 {
             list.prevadd(x);
         }
