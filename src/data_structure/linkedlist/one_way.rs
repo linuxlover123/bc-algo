@@ -74,14 +74,14 @@ impl<T: Clone + Display> OneWayLinkedList<T> {
     pub fn stringify(&self) -> String {
         let mut res = String::new();
 
-        let mut p = self.head.as_ref();
-        while let Some(n) = p {
+        let mut ptr = self.head.as_ref();
+        while let Some(h) = ptr {
             let Node {
                 data: ref d,
                 back: ref b,
-            } = **n;
+            } = **h;
             res.push_str(&format!("{}==>", d));
-            p = b.as_ref();
+            ptr = b.as_ref();
         }
         res.push_str(&format!("Nil"));
 

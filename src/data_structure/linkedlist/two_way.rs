@@ -1,7 +1,7 @@
 //! ## 双向链表
 //!
 //! #### 属性
-//! - <font color=Green>√</font> 多线程安全
+//! - <font color=Red>×</font> 多线程安全
 //! - <font color=Green>√</font> 无 unsafe 代码
 //!
 //! #### 说明
@@ -9,23 +9,23 @@
 //!
 //! #### 应用场景
 
-use std::{fmt::Display, ptr};
+use std::{rc::Rc, fmt::Display};
 
 type SizType = u64;
 
 /// 链结构。
 pub struct TwoWayLinkedList<T: Clone + Display> {
     len: SizType,
-    head: *mut Node<T>,
-    tail: *mut Node<T>,
+    head: Option<Rc<Node<T>>>,
+    tail: Option<Rc<Node<T>>>,
 }
 
 /// 节点结构。
 #[derive(Clone)]
 struct Node<T: Clone + Display> {
     data: T,
-    prev: *mut Node<T>,
-    back: *mut Node<T>,
+    prev: Option<Rc<Node<T>>>,
+    back: Option<Rc<Node<T>>>,
 }
 
 impl<T: Clone + Display> TwoWayLinkedList<T> {
@@ -33,101 +33,96 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
     pub fn new() -> TwoWayLinkedList<T> {
         TwoWayLinkedList {
             len: 0,
-            head: ptr::null_mut(),
-            tail: ptr::null_mut(),
+            head: None,
+            tail: None,
         }
     }
 
     /// 前向追加节点。
     pub fn prevadd(&mut self, data: T) {
-        let new = Box::into_raw(Box::new(Node {
+        let new = Rc::new(Node {
             data,
-            prev: ptr::null_mut(),
-            back: self.head,
-        }));
+            prev: None,
+            back: self.head.as_ref().map(|h|Rc::clone(h)),
+        });
 
         if 0 == self.len {
-            self.tail = new;
-            self.head = new;
+            self.tail = Some(Rc::clone(&new));
         } else {
-            unsafe {
-                (*self.head).prev = new;
-            }
-            self.head = new;
+            self.head.as_mut().map(|h|{Rc::get_mut(h).unwrap().prev = Some(Rc::clone(&new));});
         }
 
+        self.head = Some(new);
         self.len += 1;
     }
 
     /// 后向追加节点。
     pub fn backadd(&mut self, data: T) {
-        let new = Box::into_raw(Box::new(Node {
+        let new = Some(Rc::new(Node {
             data,
-            prev: self.tail,
-            back: ptr::null_mut(),
+            prev: self.tail.as_ref().map(|t|Rc::clone(t)),
+            back: None,
         }));
 
         if 0 == self.len {
-            self.tail = new;
-            self.head = new;
+            self.head = Some(Rc::clone(new.as_ref().unwrap()));
         } else {
-            unsafe { (*self.tail).back = new };
-            self.tail = new;
+            self.tail.as_mut().map(|t|{Rc::get_mut(t).unwrap().back = Some(Rc::clone(new.as_ref().unwrap()))});
         }
 
+        self.tail = new;
+        //self.tail.as_mut().map(|t|{*t = Rc::clone(new.as_ref().unwrap());});
         self.len += 1;
     }
 
     /// 弹出最前面的节点。
     pub fn prevpop(&mut self) -> Option<T> {
+        let res;
+
         if 0 == self.len {
-            return None;
-        } else if 1 == self.len {
-            let keep = self.head;
-
-            self.len -= 1;
-            self.head = ptr::null_mut();
-            self.tail = ptr::null_mut();
-
-            unsafe {
-                return Some(Box::<Node<T>>::from_raw(keep).data);
-            }
+            res = None;
         } else {
-            let keep = self.head;
+            res = Some(self.head.as_ref().unwrap().data.clone());
+
+            if 1 == self.len {
+                self.head = None;
+                self.tail = None;
+            } else {
+                self.head.as_mut().map(|h|{
+                    *h = Rc::clone(h.back.as_ref().unwrap());
+                    Rc::get_mut(h).unwrap().prev = None;
+                });
+            }
 
             self.len -= 1;
-            unsafe {
-                self.head = (*keep).back;
-                (*self.head).prev = ptr::null_mut();
-                return Some(Box::<Node<T>>::from_raw(keep).data);
-            };
         }
+
+        res
     }
 
     /// 弹出最后面的节点。
     pub fn backpop(&mut self) -> Option<T> {
+        let res;
+
         if 0 == self.len {
-            return None;
-        } else if 1 == self.len {
-            let keep = self.tail;
-
-            self.len -= 1;
-            self.head = ptr::null_mut();
-            self.tail = ptr::null_mut();
-
-            unsafe {
-                return Some(Box::<Node<T>>::from_raw(keep).data);
-            }
+            res = None;
         } else {
-            let keep = self.tail;
+            res = Some(self.tail.as_ref().unwrap().data.clone());
+
+            if 1 == self.len {
+                self.head = None;
+                self.tail = None;
+            } else {
+                self.tail.as_mut().map(|t|{
+                    *t = Rc::clone(t.prev.as_ref().unwrap());
+                    Rc::get_mut(t).unwrap().back = None;
+                });
+            }
 
             self.len -= 1;
-            unsafe {
-                self.tail = (*keep).prev;
-                (*self.tail).back = ptr::null_mut();
-                return Some(Box::<Node<T>>::from_raw(keep).data);
-            };
         }
+
+        res
     }
 
     /// 返回链表中所有节点的个数。
@@ -139,17 +134,15 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
     pub fn stringify(&self) -> String {
         let mut res = String::new();
 
-        let mut p = self.tail;
-        for _ in 0..self.len {
-            unsafe {
-                let Node {
-                    data,
-                    prev,
-                    back: _,
-                } = *Box::<Node<T>>::from_raw(p);
-                res.push_str(&format!("{}==>", data));
-                p = prev;
-            }
+        let mut ptr = self.tail.as_ref();
+        while let Some(t) = ptr {
+            let Node {
+                data: ref d,
+                prev: ref p,
+                back: _,
+            } = **t;
+            res.push_str(&format!("{}==>", d));
+            ptr = p.as_ref();
         }
 
         res.push_str(&format!("Nil"));
