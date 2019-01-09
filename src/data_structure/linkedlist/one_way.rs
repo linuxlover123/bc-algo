@@ -3,7 +3,7 @@
 
 use std::{
     fmt::Display,
-    ptr,
+    rc::Rc,
 };
 
 type SizType=u64;
@@ -11,14 +11,14 @@ type SizType=u64;
 /// 链结构。
 pub struct OneWayLinkedList<T: Clone + Display> {
     len: SizType ,
-    head: *mut Node<T>,
+    head: Option<Rc<Node<T>>>,
 }
 
 /// 节点结构。
 #[derive(Clone)]
 struct Node<T: Clone + Display> {
     data: T,
-    back: *mut Node<T>,
+    back: Option<Rc<Node<T>>>,
 }
 
 impl<T: Clone + Display> OneWayLinkedList<T> {
@@ -26,16 +26,16 @@ impl<T: Clone + Display> OneWayLinkedList<T> {
     pub fn new() -> OneWayLinkedList<T> {
         OneWayLinkedList {
             len: 0,
-            head: ptr::null_mut(),
+            head: None 
         }
     }
 
     /// 向链表中添加一个节点。
     pub fn add(&mut self, data: T) {
-        let new = Box::into_raw(Box::new(
+        let new = Some(Rc::new(
             Node{
-                data,
-                back: self.head, 
+                data: data.clone(),
+                back: self.head.as_ref().map(|h|Rc::clone(h)), 
             }));
 
         self.head = new;
@@ -47,20 +47,18 @@ impl<T: Clone + Display> OneWayLinkedList<T> {
         if 0 == self.len {
             return None;
         } else if 1 == self.len {
-            let keep = self.head;
+            let keep = Rc::clone(self.head.as_ref().unwrap());
 
             self.len -= 1;
-            self.head = ptr::null_mut();
+            self.head = None;
 
-            unsafe { return Some(Box::<Node<T>>::from_raw(keep).data); }
+            return Some((*keep).data.clone());
         } else {
-            let keep = self.head;
+            let keep = Rc::clone(self.head.as_ref().unwrap());
 
             self.len -= 1;
-            unsafe {
-                self.head = (*keep).back;
-                return Some(Box::<Node<T>>::from_raw(keep).data);
-            };
+            self.head.as_mut().map(|h|Rc::clone(h.back.as_ref().unwrap()));
+            return Some((*keep).data.clone());
         }
     }
 
@@ -73,13 +71,11 @@ impl<T: Clone + Display> OneWayLinkedList<T> {
     pub fn stringify(&self) -> String {
         let mut res = String::new();
 
-        let mut p = self.head;
+        let mut p = Rc::clone(self.head.as_ref().unwrap());
         for _ in 0..self.len {
-            unsafe {
-                let Node{data, back} = *Box::<Node<T>>::from_raw(p);
-                res.push_str(&format!("{}==>", data));
-                p = back;
-            }
+            let Node{data: ref d, back: ref b} = *p;
+            res.push_str(&format!("{}==>", d));
+            p = Rc::clone(b.as_ref().unwrap());
         }
 
         res.push_str(&format!("Nil"));

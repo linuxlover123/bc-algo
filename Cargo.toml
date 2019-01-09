@@ -4,5 +4,5 @@ version = "0.1.0"
 authors = ["fanhui <hui.fan@mail.ru>"]
 edition = "2018"
 
-[dependencies]
+[dependencies-dev]
 lazy_static = "1.2.0"
