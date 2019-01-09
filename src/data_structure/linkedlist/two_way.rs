@@ -174,8 +174,8 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
 
 #[cfg(test)]
 mod tests {
-    use std::thread;
     use super::*;
+    use std::thread;
 
     #[test]
     fn test() {
