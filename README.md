@@ -16,8 +16,9 @@ cargo doc --open
 
 ## 完成进度
 #### linked list
-- [x] one-way linkedlist
-- [x] two-way linkedlist
+- [x] one-way linked list
+- [x] two-way linked list
+- [x] circular linked list
 
 #### tree
 - [ ] AVL tree
