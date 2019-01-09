@@ -37,24 +37,23 @@ impl<T: Clone + Display> OneWayLinkedList<T> {
 
     /// 删除最新的节点，并返回其值；若链表为空，则返回 None。
     pub fn pop(&mut self) -> Option<T> {
+        let res;
         if 0 == self.len {
-            return None;
-        } else if 1 == self.len {
-            let keep = Rc::clone(self.head.as_ref().unwrap());
-
-            self.len -= 1;
-            self.head = None;
-
-            return Some((*keep).data.clone());
+            res = None;
         } else {
-            let keep = Rc::clone(self.head.as_ref().unwrap());
+            res = Some(self.head.as_ref().unwrap().data.clone());
+
+            if 1 == self.len {
+                self.head = None;
+            } else {
+                self.head.as_mut().map(|h| {
+                    *h = Rc::clone(h.back.as_ref().unwrap());
+                });
+            }
 
             self.len -= 1;
-            self.head.as_mut().map(|h| {
-                *h = Rc::clone(h.back.as_ref().unwrap());
-            });
-            return Some((*keep).data.clone());
         }
+        res
     }
 
     /// 返回链表中所有节点的个数。
