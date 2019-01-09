@@ -1,126 +1,146 @@
 //! ## 双向链表
 //!
 //! #### 属性
-//! - <font color=Red>×</font> 多线程安全
+//! - <font color=Green>√</font> 多线程安全
 //! - <font color=Green>√</font> 无 unsafe 代码
 //!
 //! #### 说明
 //! - 具备双向索引能力的链表。
 //!
 //! #### 应用场景
+//! - 大幅频繁变动的列表集。
 
-use std::{rc::Rc, fmt::Display};
+use std::fmt::Display;
+use std::sync::Arc;
+use std::sync::RwLock;
 
 type SizType = u64;
 
 /// 链结构。
-pub struct TwoWayLinkedList<T: Clone + Display> {
+#[derive(Clone)]
+pub struct TwoWayLinkedList<T: Clone + Display>(Arc<RwLock<List<T>>>);
+
+struct List<T: Clone + Display> {
     len: SizType,
-    head: Option<Rc<Node<T>>>,
-    tail: Option<Rc<Node<T>>>,
+    head: Option<Arc<Node<T>>>,
+    tail: Option<Arc<Node<T>>>,
 }
 
 /// 节点结构。
 #[derive(Clone)]
 struct Node<T: Clone + Display> {
     data: T,
-    prev: Option<Rc<Node<T>>>,
-    back: Option<Rc<Node<T>>>,
+    prev: Option<Arc<Node<T>>>,
+    back: Option<Arc<Node<T>>>,
 }
 
 impl<T: Clone + Display> TwoWayLinkedList<T> {
     /// 初始化一个新链表。
     pub fn new() -> TwoWayLinkedList<T> {
-        TwoWayLinkedList {
+        TwoWayLinkedList(Arc::new(RwLock::new(List {
             len: 0,
             head: None,
             tail: None,
-        }
+        })))
     }
 
     /// 前向追加节点。
-    pub fn prevadd(&mut self, data: T) {
-        let new = Rc::new(Node {
+    pub fn prevadd(&self, data: T) {
+        let mut me = self.0.write().unwrap();
+
+        let new = Arc::new(Node {
             data,
             prev: None,
-            back: self.head.as_ref().map(|h|Rc::clone(h)),
+            back: me.head.as_ref().map(|h| Arc::clone(h)),
         });
 
-        self.head = Some(Rc::clone(&new));
+        me.head = Some(Arc::clone(&new));
 
-        if 0 == self.len {
-            self.tail = Some(new);
+        if 0 == me.len {
+            me.tail = Some(new);
         } else {
-            Rc::get_mut(self.head.as_mut().unwrap()).map(|h|Rc::get_mut(h.back.as_mut().unwrap()).map(|b|{b.prev = Some(new);}));
+            Arc::get_mut(me.head.as_mut().unwrap()).map(|h| {
+                Arc::get_mut(h.back.as_mut().unwrap()).map(|b| {
+                    b.prev = Some(new);
+                })
+            });
         }
 
-        self.len += 1;
+        me.len += 1;
     }
 
     /// 后向追加节点。
-    pub fn backadd(&mut self, data: T) {
-        let new = Rc::new(Node {
+    pub fn backadd(&self, data: T) {
+        let mut me = self.0.write().unwrap();
+
+        let new = Arc::new(Node {
             data,
-            prev: self.tail.as_ref().map(|t|Rc::clone(t)),
+            prev: me.tail.as_ref().map(|t| Arc::clone(t)),
             back: None,
         });
 
-        self.tail = Some(Rc::clone(&new));
+        me.tail = Some(Arc::clone(&new));
 
-        if 0 == self.len {
-            self.head = Some(new);
+        if 0 == me.len {
+            me.head = Some(new);
         } else {
-            Rc::get_mut(self.tail.as_mut().unwrap()).map(|t|Rc::get_mut(t.prev.as_mut().unwrap()).map(|p|{p.back = Some(new);}));
+            Arc::get_mut(me.tail.as_mut().unwrap()).map(|t| {
+                Arc::get_mut(t.prev.as_mut().unwrap()).map(|p| {
+                    p.back = Some(new);
+                })
+            });
         }
 
-        self.len += 1;
+        me.len += 1;
     }
 
     /// 弹出最前面的节点。
-    pub fn prevpop(&mut self) -> Option<T> {
+    pub fn prevpop(&self) -> Option<T> {
+        let mut me = self.0.write().unwrap();
         let res;
 
-        if 0 == self.len {
+        if 0 == me.len {
             res = None;
         } else {
-            res = Some(self.head.as_ref().unwrap().data.clone());
+            res = Some(me.head.as_ref().unwrap().data.clone());
 
-            if 1 == self.len {
-                self.head = None;
-                self.tail = None;
+            if 1 == me.len {
+                me.head = None;
+                me.tail = None;
             } else {
-                self.head.as_mut().map(|h|{
-                    *h = Rc::clone(h.back.as_ref().unwrap());
-                    Rc::get_mut(h).unwrap().prev = None;
+                me.head.as_mut().map(|h| {
+                    *h = Arc::clone(h.back.as_ref().unwrap());
+                    Arc::get_mut(h).unwrap().prev = None;
                 });
             }
 
-            self.len -= 1;
+            me.len -= 1;
         }
 
         res
     }
 
     /// 弹出最后面的节点。
-    pub fn backpop(&mut self) -> Option<T> {
+    pub fn backpop(&self) -> Option<T> {
+        let mut me = self.0.write().unwrap();
         let res;
 
-        if 0 == self.len {
+        if 0 == me.len {
             res = None;
         } else {
-            res = Some(self.tail.as_ref().unwrap().data.clone());
+            res = Some(me.tail.as_ref().unwrap().data.clone());
 
-            if 1 == self.len {
-                self.head = None;
-                self.tail = None;
+            if 1 == me.len {
+                me.head = None;
+                me.tail = None;
             } else {
-                self.tail.as_mut().map(|t|{
-                    *t = Rc::clone(t.prev.as_ref().unwrap());
-                    Rc::get_mut(t).unwrap().back = None;
+                me.tail.as_mut().map(|t| {
+                    *t = Arc::clone(t.prev.as_ref().unwrap());
+                    Arc::get_mut(t).unwrap().back = None;
                 });
             }
 
-            self.len -= 1;
+            me.len -= 1;
         }
 
         res
@@ -128,14 +148,15 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
 
     /// 返回链表中所有节点的个数。
     pub fn len(&self) -> SizType {
-        self.len
+        self.0.read().unwrap().len
     }
 
     /// 按 **prev ==> back** 的顺序依次打印每个节点的值。
     pub fn stringify(&self) -> String {
+        let me = self.0.read().unwrap();
         let mut res = String::new();
 
-        let mut ptr = self.tail.as_ref();
+        let mut ptr = me.tail.as_ref();
         while let Some(t) = ptr {
             let Node {
                 data: ref d,
@@ -153,29 +174,42 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::thread;
     use super::*;
 
     #[test]
     fn test() {
-        let mut list = TwoWayLinkedList::new();
-        for x in 0..=99 {
-            list.prevadd(x);
-        }
-        assert_eq!(list.len, 100);
+        let l = TwoWayLinkedList::new();
 
-        for x in 1..=100 {
-            list.backadd(-x);
-        }
-        assert_eq!(list.len, 200);
+        let list = l.clone();
+        let tid = thread::spawn(move || {
+            for x in 0..=99 {
+                list.prevadd(x);
+            }
+            for x in 1..=100 {
+                list.backadd(-x);
+            }
+        });
 
-        assert_eq!(99, list.prevpop().unwrap());
-        assert_eq!(98, list.prevpop().unwrap());
-        assert_eq!(97, list.prevpop().unwrap());
-        assert_eq!(-100, list.backpop().unwrap());
-        assert_eq!(-99, list.backpop().unwrap());
-        assert_eq!(-98, list.backpop().unwrap());
-        assert_eq!(list.len, 194);
+        tid.join().unwrap();
+        assert_eq!(l.len(), 200);
 
-        println!("{}", list.stringify());
+        let list = l.clone();
+        let tid = thread::spawn(move || {
+            list.prevpop().unwrap();
+            list.prevpop().unwrap();
+            list.prevpop().unwrap();
+            list.backpop().unwrap();
+            list.backpop().unwrap();
+            list.backpop().unwrap();
+        });
+
+        tid.join().unwrap();
+        assert_eq!(l.len(), 194);
+
+        assert_eq!(96, l.prevpop().unwrap());
+        assert_eq!(-97, l.backpop().unwrap());
+
+        println!("{}", l.stringify());
     }
 }
