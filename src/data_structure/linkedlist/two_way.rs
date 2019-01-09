@@ -46,32 +46,33 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
             back: self.head.as_ref().map(|h|Rc::clone(h)),
         });
 
+        self.head = Some(Rc::clone(&new));
+
         if 0 == self.len {
-            self.tail = Some(Rc::clone(&new));
+            self.tail = Some(new);
         } else {
-            self.head.as_mut().map(|h|{Rc::get_mut(h).unwrap().prev = Some(Rc::clone(&new));});
+            Rc::get_mut(self.head.as_mut().unwrap()).map(|h|Rc::get_mut(h.back.as_mut().unwrap()).map(|b|{b.prev = Some(new);}));
         }
 
-        self.head = Some(new);
         self.len += 1;
     }
 
     /// 后向追加节点。
     pub fn backadd(&mut self, data: T) {
-        let new = Some(Rc::new(Node {
+        let new = Rc::new(Node {
             data,
             prev: self.tail.as_ref().map(|t|Rc::clone(t)),
             back: None,
-        }));
+        });
+
+        self.tail = Some(Rc::clone(&new));
 
         if 0 == self.len {
-            self.head = Some(Rc::clone(new.as_ref().unwrap()));
+            self.head = Some(new);
         } else {
-            self.tail.as_mut().map(|t|{Rc::get_mut(t).unwrap().back = Some(Rc::clone(new.as_ref().unwrap()))});
+            Rc::get_mut(self.tail.as_mut().unwrap()).map(|t|Rc::get_mut(t.prev.as_mut().unwrap()).map(|p|{p.back = Some(new);}));
         }
 
-        self.tail = new;
-        //self.tail.as_mut().map(|t|{*t = Rc::clone(new.as_ref().unwrap());});
         self.len += 1;
     }
 
