@@ -25,6 +25,7 @@ struct List<T: Clone> {
     len: SizType,
     head: Arc<RwLock<Option<Node<T>>>>,
     tail: Arc<RwLock<Option<Node<T>>>>,
+    none: Arc<RwLock<Option<Node<T>>>>,
 }
 
 /// 节点结构。
@@ -42,6 +43,7 @@ impl<T: Clone> TwoWayLinkedList<T> {
             len: 0,
             head: Arc::new(RwLock::new(None)),
             tail: Arc::new(RwLock::new(None)),
+            none: Arc::new(RwLock::new(None)),
         })))
     }
 
@@ -51,7 +53,7 @@ impl<T: Clone> TwoWayLinkedList<T> {
 
         let new = Arc::new(RwLock::new(Some(Node {
             data,
-            prev: Arc::new(RwLock::new(None)),
+            prev: Arc::clone(&me.none),
             back: Arc::clone(&me.head),
         })));
 
@@ -72,7 +74,7 @@ impl<T: Clone> TwoWayLinkedList<T> {
         let new = Arc::new(RwLock::new(Some(Node {
             data,
             prev: Arc::clone(&me.tail),
-            back: Arc::new(RwLock::new(None)),
+            back: Arc::clone(&me.none),
         })));
 
         if 0 == me.len {
@@ -96,12 +98,12 @@ impl<T: Clone> TwoWayLinkedList<T> {
             res = Some(me.head.read().unwrap().as_ref().unwrap().data.clone());
 
             if 1 == me.len {
-                me.head = Arc::new(RwLock::new(None));
-                me.tail = Arc::new(RwLock::new(None));
+                me.head = Arc::clone(&me.none);
+                me.tail = Arc::clone(&me.none);
             } else {
                 let keep = Arc::clone(&me.head.read().unwrap().as_ref().unwrap().back);
                 me.head = keep;
-                me.head.write().unwrap().as_mut().map(|h|{h.prev = Arc::new(RwLock::new(None));});
+                me.head.write().unwrap().as_mut().map(|h|{h.prev = Arc::clone(&me.none);});
             }
 
             me.len -= 1;
@@ -121,12 +123,12 @@ impl<T: Clone> TwoWayLinkedList<T> {
             res = Some(me.tail.read().unwrap().as_ref().unwrap().data.clone());
 
             if 1 == me.len {
-                me.head = Arc::new(RwLock::new(None));
-                me.tail = Arc::new(RwLock::new(None));
+                me.head = Arc::clone(&me.none);
+                me.tail = Arc::clone(&me.none);
             } else {
                 let keep = Arc::clone(&me.tail.read().unwrap().as_ref().unwrap().prev);
                 me.tail = keep;
-                me.tail.write().unwrap().as_mut().map(|t|{t.back = Arc::new(RwLock::new(None));});
+                me.tail.write().unwrap().as_mut().map(|t|{t.back = Arc::clone(&me.none);});
             }
 
             me.len -= 1;
