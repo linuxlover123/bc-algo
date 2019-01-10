@@ -1,6 +1,7 @@
 //! ## 单向链表
 //!
 //! #### 属性
+//! - <font color=Red>×</font> 适用于生产环境
 //! - <font color=Red>×</font> 多线程安全
 //! - <font color=Green>√</font> 无 unsafe 代码
 //!
