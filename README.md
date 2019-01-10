@@ -22,12 +22,13 @@ cargo doc --open
 #### tree
 - [ ] AVL tree
 - [ ] red-black tree
+- [ ] B tree
+- [ ] B+ tree
 - [ ] merkle tree
 - [ ] sorted merlke tree
 - [ ] trie
+- [ ] patricia trie
 - [ ] MPT
-- [ ] B tree
-- [ ] B+ tree
 
 #### graph
 - [ ] DAG
