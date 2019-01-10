@@ -1,16 +1,16 @@
 //! ## 双向链表
 //!
-//! #### 属性
-//! - <font color=Green>√</font> 多线程安全
-//! - <font color=Green>√</font> 无 unsafe 代码
-//!
-//! #### 说明
+//! #### 算法说明
 //! - 具备双向索引能力的链表；
 //! - 综合效率较低。
 //!
 //! #### 应用场景
 //! - 算法演示；
 //! - 实际应用中通常会选用顺序存储构，如 Vec 等。
+//!
+//! #### 实现属性
+//! - <font color=Green>√</font> 多线程安全
+//! - <font color=Green>√</font> 无 unsafe 代码
 
 use std::sync::Arc;
 use std::sync::RwLock;
