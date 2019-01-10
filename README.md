@@ -38,8 +38,7 @@ cargo doc --open
 - [ ] complex net
 
 #### bloom filter
-- [ ] single hash bloom filter
-- [ ] multi hash bloom filter
+- [ ] counting bloom filter
 
 #### serialize and deserialize
 - [ ] ethereum RLP
