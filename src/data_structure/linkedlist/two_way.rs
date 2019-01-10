@@ -60,7 +60,11 @@ impl<T: Clone> TwoWayLinkedList<T> {
         if 0 == me.len {
             me.tail = Arc::clone(&new);
         } else {
-            me.head.write().unwrap().as_mut().map(|h|h.prev = Arc::clone(&new));
+            me.head
+                .write()
+                .unwrap()
+                .as_mut()
+                .map(|h| h.prev = Arc::clone(&new));
         }
 
         me.head = new;
@@ -80,7 +84,11 @@ impl<T: Clone> TwoWayLinkedList<T> {
         if 0 == me.len {
             me.head = Arc::clone(&new);
         } else {
-            me.tail.write().unwrap().as_mut().map(|t|t.back = Arc::clone(&new));
+            me.tail
+                .write()
+                .unwrap()
+                .as_mut()
+                .map(|t| t.back = Arc::clone(&new));
         }
 
         me.tail = new;
@@ -103,7 +111,9 @@ impl<T: Clone> TwoWayLinkedList<T> {
             } else {
                 let keep = Arc::clone(&me.head.read().unwrap().as_ref().unwrap().back);
                 me.head = keep;
-                me.head.write().unwrap().as_mut().map(|h|{h.prev = Arc::clone(&me.none);});
+                me.head.write().unwrap().as_mut().map(|h| {
+                    h.prev = Arc::clone(&me.none);
+                });
             }
 
             me.len -= 1;
@@ -128,7 +138,9 @@ impl<T: Clone> TwoWayLinkedList<T> {
             } else {
                 let keep = Arc::clone(&me.tail.read().unwrap().as_ref().unwrap().prev);
                 me.tail = keep;
-                me.tail.write().unwrap().as_mut().map(|t|{t.back = Arc::clone(&me.none);});
+                me.tail.write().unwrap().as_mut().map(|t| {
+                    t.back = Arc::clone(&me.none);
+                });
             }
 
             me.len -= 1;

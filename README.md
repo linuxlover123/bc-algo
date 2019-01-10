@@ -38,6 +38,7 @@ cargo doc --open
 - [ ] complex net
 
 #### bloom filter
+- [ ] partial bloom filter
 - [ ] counting bloom filter
 
 #### serialize and deserialize
