@@ -55,18 +55,17 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
         });
 
         me.head = Some(Arc::clone(&new));
+        me.len += 1;
 
-        if 0 == me.len {
+        if 1 == me.len {
             me.tail = Some(new);
         } else {
             Arc::get_mut(me.head.as_mut().unwrap()).map(|h| {
                 Arc::get_mut(h.back.as_mut().unwrap()).map(|b| {
                     b.prev = Some(new);
-                })
+                });
             });
         }
-
-        me.len += 1;
     }
 
     /// 后向追加节点。
@@ -80,18 +79,17 @@ impl<T: Clone + Display> TwoWayLinkedList<T> {
         });
 
         me.tail = Some(Arc::clone(&new));
+        me.len += 1;
 
-        if 0 == me.len {
+        if 1 == me.len {
             me.head = Some(new);
         } else {
             Arc::get_mut(me.tail.as_mut().unwrap()).map(|t| {
                 Arc::get_mut(t.prev.as_mut().unwrap()).map(|p| {
                     p.back = Some(new);
-                })
+                });
             });
         }
-
-        me.len += 1;
     }
 
     /// 弹出最前面的节点。
@@ -179,37 +177,47 @@ mod tests {
 
     #[test]
     fn test() {
-        let l = TwoWayLinkedList::new();
+        let list = TwoWayLinkedList::new();
 
-        let list = l.clone();
-        let tid = thread::spawn(move || {
+        let l = list.clone();
+        let ll = list.clone();
+
+        let tid_l = thread::spawn(move || {
             for x in 0..=99 {
-                list.prevadd(x);
+                l.prevadd(x);
             }
+        });
+        let tid_ll = thread::spawn(move || {
             for x in 1..=100 {
-                list.backadd(-x);
+                ll.backadd(-x);
             }
         });
 
-        tid.join().unwrap();
-        assert_eq!(l.len(), 200);
+        tid_l.join().unwrap();
+        tid_ll.join().unwrap();
+        assert_eq!(list.len(), 200);
 
-        let list = l.clone();
-        let tid = thread::spawn(move || {
-            list.prevpop().unwrap();
-            list.prevpop().unwrap();
-            list.prevpop().unwrap();
-            list.backpop().unwrap();
-            list.backpop().unwrap();
-            list.backpop().unwrap();
+        let l = list.clone();
+        let ll = list.clone();
+
+        let tid_l = thread::spawn(move || {
+            l.prevpop().unwrap();
+            l.prevpop().unwrap();
+            l.prevpop().unwrap();
+        });
+        let tid_ll = thread::spawn(move || {
+            ll.backpop().unwrap();
+            ll.backpop().unwrap();
+            ll.backpop().unwrap();
         });
 
-        tid.join().unwrap();
-        assert_eq!(l.len(), 194);
+        tid_l.join().unwrap();
+        tid_ll.join().unwrap();
+        assert_eq!(list.len(), 194);
 
-        assert_eq!(96, l.prevpop().unwrap());
-        assert_eq!(-97, l.backpop().unwrap());
+        assert_eq!(96, list.prevpop().unwrap());
+        assert_eq!(-97, list.backpop().unwrap());
 
-        println!("{}", l.stringify());
+        println!("{}", list.stringify());
     }
 }
