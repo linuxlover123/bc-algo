@@ -4,6 +4,6 @@ version = "0.1.0"
 authors = ["fanhui <hui.fan@mail.ru>"]
 edition = "2018"
 
-[dependencies-dev]
+[dev-dependencies]
 lazy_static = "1.2.0"
 rand = "0.6.4"
