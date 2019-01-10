@@ -18,7 +18,6 @@ cargo doc --open
 #### linked list
 - [x] one-way linked list
 - [x] two-way linked list
-- [x] circular linked list
 
 #### tree
 - [ ] AVL tree
