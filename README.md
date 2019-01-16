@@ -15,7 +15,8 @@ cargo doc --open
 ```
 
 ## 完成进度
-#### tree
+#### 树
+> tree
 - [ ] huffman tree
 - [ ] merkle tree
 - [ ] sorted merlke tree
@@ -27,37 +28,43 @@ cargo doc --open
 - [ ] B tree
 - [ ] B+ tree
 
-#### graph
+#### 图
+> graph
 - [ ] DAG
 - [ ] skip list
 - [ ] base graph
 - [ ] base net
 - [ ] complex net
 
-#### bloom filter
+#### 布隆过滤器
+> bloom filter
 - [ ] partial bloom filter
 - [ ] counting bloom filter
 
-#### linked list
+#### 链表
+> linked list
 - [x] one-way linked list
 - [x] two-way linked list
 
-#### serialize and deserialize
+#### 序列化与反序列化
+> serialize and deserialize
 - [ ] ethereum RLP
 
-#### p2p routing algorithms
+#### P2P 路由算法
+> p2p routing algorithms
 - [ ] kademlia
 - [ ] S/kademlia
 - [ ] coral
 
-#### consensus algorithms
+#### 分布式共识算法
+> consensus algorithms
 - [ ] bitcoin POW
 - [ ] ethereum POW
 - [ ] raft
 
-#### Optimizing algorithm by mathematical theorem
+#### 应用数学原理优化算法
+> Optimize algorithm using mathematical theorems
 - [ ] 初、高中数学定理...
-- [ ] 线性规划
-- [ ] 线性代数
+- [ ] 线性代数与线性规划
 - [ ] 微积分
 - [ ] ...
