@@ -50,19 +50,19 @@ cargo doc --open
 > Serialize and Deserialize
 > - [ ] ethereum RLP
 
+#### 共识算法
+> Consensus Algorithms
+> - [ ] bitcoin POW
+> - [ ] ethereum POW
+> - [ ] raft
+
 #### P2P 路由算法
 > P2P Routing Algorithms
 > - [ ] kademlia
 > - [ ] S/kademlia
 > - [ ] coral
 
-#### 分布式共识算法
-> Consensus Algorithms
-> - [ ] bitcoin POW
-> - [ ] ethereum POW
-> - [ ] raft
-
-#### 应用数学原理优化算法
+#### 数学原理在算法
 > Optimize algorithm using mathematical theorems
 > - [ ] 初、高中数学定理...
 > - [ ] 线性代数与线性规划
