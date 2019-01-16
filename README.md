@@ -16,55 +16,55 @@ cargo doc --open
 
 ## 完成进度
 #### 树
-> tree
-- [ ] huffman tree
-- [ ] merkle tree
-- [ ] sorted merlke tree
-- [ ] trie
-- [ ] patricia trie
-- [ ] MPT
-- [ ] AVL tree
-- [ ] red black tree
-- [ ] B tree
-- [ ] B+ tree
+> Tree
+> - [ ] huffman tree
+> - [ ] merkle tree
+> - [ ] sorted merlke tree
+> - [ ] trie
+> - [ ] patricia trie
+> - [ ] MPT
+> - [ ] AVL tree
+> - [ ] red black tree
+> - [ ] B tree
+> - [ ] B+ tree
 
 #### 图
-> graph
-- [ ] DAG
-- [ ] skip list
-- [ ] base graph
-- [ ] base net
-- [ ] complex net
+> Graph
+> - [ ] DAG
+> - [ ] skip list
+> - [ ] base graph
+> - [ ] base net
+> - [ ] complex net
 
 #### 布隆过滤器
-> bloom filter
-- [ ] partial bloom filter
-- [ ] counting bloom filter
+> Bloom Filter
+> - [ ] partial bloom filter
+> - [ ] counting bloom filter
 
 #### 链表
-> linked list
-- [x] one-way linked list
-- [x] two-way linked list
+> Linked List
+> - [x] one-way linked list
+> - [x] two-way linked list
 
 #### 序列化与反序列化
-> serialize and deserialize
-- [ ] ethereum RLP
+> Serialize and Deserialize
+> - [ ] ethereum RLP
 
 #### P2P 路由算法
-> p2p routing algorithms
-- [ ] kademlia
-- [ ] S/kademlia
-- [ ] coral
+> P2P Routing Algorithms
+> - [ ] kademlia
+> - [ ] S/kademlia
+> - [ ] coral
 
 #### 分布式共识算法
-> consensus algorithms
-- [ ] bitcoin POW
-- [ ] ethereum POW
-- [ ] raft
+> Consensus Algorithms
+> - [ ] bitcoin POW
+> - [ ] ethereum POW
+> - [ ] raft
 
 #### 应用数学原理优化算法
 > Optimize algorithm using mathematical theorems
-- [ ] 初、高中数学定理...
-- [ ] 线性代数与线性规划
-- [ ] 微积分
-- [ ] ...
+> - [ ] 初、高中数学定理...
+> - [ ] 线性代数与线性规划
+> - [ ] 微积分
+> - [ ] ...
