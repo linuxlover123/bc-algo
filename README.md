@@ -62,7 +62,7 @@ cargo doc --open
 > - [ ] S/kademlia
 > - [ ] coral
 
-#### 数学原理在算法
+#### 数学＋算法＝优质算法
 > Optimize algorithm using mathematical theorems
 > - [ ] 初、高中数学定理...
 > - [ ] 线性代数与线性规划
