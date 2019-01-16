@@ -15,10 +15,6 @@ cargo doc --open
 ```
 
 ## 完成进度
-#### linked list
-- [x] one-way linked list
-- [x] two-way linked list
-
 #### tree
 - [ ] huffman tree
 - [ ] merkle tree
@@ -42,10 +38,14 @@ cargo doc --open
 - [ ] partial bloom filter
 - [ ] counting bloom filter
 
+#### linked list
+- [x] one-way linked list
+- [x] two-way linked list
+
 #### serialize and deserialize
 - [ ] ethereum RLP
 
-#### P2P routing algorithms
+#### p2p routing algorithms
 - [ ] kademlia
 - [ ] S/kademlia
 - [ ] coral
@@ -54,3 +54,10 @@ cargo doc --open
 - [ ] bitcoin POW
 - [ ] ethereum POW
 - [ ] raft
+
+#### Optimizing algorithm by mathematical theorem
+- [ ] 初、高中数学定理...
+- [ ] 线性规划
+- [ ] 线性代数
+- [ ] 微积分
+- [ ] ...
