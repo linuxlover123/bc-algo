@@ -161,7 +161,7 @@ mod tests {
     use std::thread;
 
     #[test]
-    fn test() {
+    fn two_way_linkedlist() {
         let list = TwoWayLinkedList::new();
 
         let l = list.clone();

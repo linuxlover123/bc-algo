@@ -94,7 +94,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test() {
+    fn one_way_linkedlist() {
         let mut list = OneWayLinkedList::new();
         for x in 0..=99 {
             list.add(x);

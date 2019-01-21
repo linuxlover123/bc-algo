@@ -16,3 +16,4 @@ pub mod mpt;
 pub mod red_black;
 pub mod sorted_merkle;
 pub mod trie;
+pub mod huffman;
