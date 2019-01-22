@@ -11,10 +11,10 @@
 //! - <font color=Green>√</font> 无 unsafe 代码
 
 type Byte = u8;
-const ByteSiz: usize = std::mem::size_of::<Byte>();
+const BYTE_SIZ: usize = std::mem::size_of::<Byte>();
 
 //> 预置bit集合，优化位运算的效率
-const BitSet: [Byte; 8] = [
+const BIT_SET: [Byte; 8] = [
     0b00000001, 0b00000010, 0b00000100, 0b00001000, 0b00010000, 0b00100000, 0b01000000, 0b10000000,
 ];
 
@@ -35,7 +35,7 @@ type DecodeTable = Vec<(Vec<Byte>, Byte)>;
 pub struct Encoded {
     //encoded data received from some sender[s]
     data: Vec<Byte>,
-    //the number of bit[s] at the last byte for aligning to ByteSiz
+    //the number of bit[s] at the last byte for aligning to BYTE_SIZ
     pad_len: usize,
 }
 
@@ -56,7 +56,7 @@ macro_rules! walk_on_tree {
         }
 
         $bit_idx += 1;
-        $bit_idx %= ByteSiz;
+        $bit_idx %= BYTE_SIZ;
         if 0 == $bit_idx {
             $byte_idx += 1;
         }
@@ -85,7 +85,7 @@ pub trait Huffman {
     fn encode(data: &[Byte], table: &EncodeTable) -> Encoded {
         //计算编码结果所需空间，超过usize最大值会**panic**
         let mut len = data.iter().map(|i| table[*i as usize].len()).sum();
-        let pad_len = len % ByteSiz;
+        let pad_len = len % BYTE_SIZ;
         len = if 0 == pad_len { len / 8 } else { 1 + len / 8 };
         let mut res = Encoded {
             data: Vec::with_capacity(len),
@@ -96,10 +96,12 @@ pub trait Huffman {
         let mut byte_idx = 0usize;
         let mut bit_idx = 0usize;
         for i in 0..data.len() {
-            for j in table[data[i] as usize] {
-                res.data[byte_idx] = set_bit(res.data[byte_idx], bit_idx);
+            for j in table[data[i] as usize].iter() {
+                if 1 as Byte == *j {
+                    res.data[byte_idx] = set_bit(res.data[byte_idx], bit_idx);
+                }
                 bit_idx += 1;
-                bit_idx %= ByteSiz;
+                bit_idx %= BYTE_SIZ;
                 if 0 == bit_idx {
                     byte_idx += 1;
                 }
@@ -131,7 +133,7 @@ pub trait Huffman {
 
         if 0 < encoded.pad_len {
             byte_idx = encoded.data.len() - 1;
-            bit_idx = ByteSiz - encoded.pad_len;
+            bit_idx = BYTE_SIZ - encoded.pad_len;
             loop {
                 //非叶点节上不会有数据
                 if let Some(_) = t.data {
@@ -151,7 +153,7 @@ pub trait Huffman {
 //- #: 若第n位bit为1，返回true，否则返回false
 #[inline]
 fn check_bit(data: Byte, n: usize) -> bool {
-    if 0 < data & BitSet[n] {
+    if 0 < data & BIT_SET[n] {
         true
     } else {
         false
@@ -161,30 +163,8 @@ fn check_bit(data: Byte, n: usize) -> bool {
 //> It is cheaper to return a Byte than use a pointer
 #[inline]
 fn set_bit(data: Byte, n: usize) -> Byte {
-    data | BitSet[n]
+    data | BIT_SET[n]
 }
-
-/*
-//> 负责除最后一个Byte之外的数据编码；
-//> 最后一个字节因可能含有pad位，将在上层调用处特殊处理
-//- #: the final encoded data
-//- @bits[in]: assert!(0 == bits.len() % 8)
-//- @res[out]: encoded result will be written here
-fn encode_gen_res(bits: &[Byte], res: Vec<Byte>) -> Vec<Byte> {
-    let mut byte: Byte = 0;
-    let mut base = 0usize;
-    for _ in 0..(bits.len() / 8) {
-        for j in 0..8 {
-            if 1 == bits[base + j as usize] {
-                byte = set_bit(byte, j);
-            }
-        }
-        res.push(byte);
-        byte = 0;
-        base += 8;
-    }
-}
-*/
 
 #[cfg(test)]
 mod tests {
