@@ -56,14 +56,11 @@ fn traversal(tree: Arc<RwLock<HuffmanTree>>, route: &mut Vec<u8>, detb: &mut Vec
         route.push(0);
         traversal(Arc::clone(node), route, detb);
         route.pop();
-    } else {
-        if let Some(ref node) = t.right {
-            route.push(1);
-            traversal(Arc::clone(node), route, detb);
-            route.pop();
-        } else {
-            panic!("BUG!");
-        }
+    }
+    if let Some(ref node) = t.right {
+        route.push(1);
+        traversal(Arc::clone(node), route, detb);
+        route.pop();
     }
 }
 
@@ -125,7 +122,7 @@ fn gen_table(data: &[u8]) -> (EncodeTable, DecodeTable) {
     let mut route = vec![];
     traversal(Arc::new(RwLock::new(root)), &mut route, &mut detb);
 
-    detb.sort_unstable_by(|a, b|a.1.cmp(&b.1));
+    detb.sort_unstable_by(|a, b| a.1.cmp(&b.1));
     let mut entb = Vec::with_capacity(TB_SIZ);
     for (v, _) in &detb {
         entb.push(v.clone());
