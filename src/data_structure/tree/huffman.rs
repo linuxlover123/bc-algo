@@ -41,59 +41,38 @@ struct Encoded {
     pad_len: usize,
 }
 
-macro_rules! step_forward {
-    ($encoded: expr, $t: expr, $byte_idx: expr, $bit_idx: expr) => {
-        if check_bit($encoded.data[$byte_idx], $bit_idx) {
-            if let Some(node) = Arc::clone(&$t).read().unwrap().right.as_ref() {
-                $t = Arc::clone(node);
-            } else {
-                return Err(());
-            }
-        } else {
-            if let Some(node) = Arc::clone(&$t).read().unwrap().left.as_ref() {
-                $t = Arc::clone(node);
-            } else {
-                return Err(());
-            }
-        }
-
-        $bit_idx += 1;
-        $bit_idx %= BYTE_BITS;
-        if 0 == $bit_idx {
-            $byte_idx += 1;
-        }
-        if $byte_idx >= $encoded.data.len() {
-            break;
-        }
-    };
-}
-
 //> walk on tree
+//- @tree: huffman tree
+//- @route: routing path of a leaf node
+//- @detb: decode-table
 fn traversal(tree: Arc<RwLock<HuffmanTree>>, route: &mut Vec<u8>, detb: &mut Vec<(Vec<u8>, u8)>) {
     if let Some(v) = tree.read().unwrap().data {
         detb.push((route.clone(), v));
         return;
     }
 
-    if let Some(ref node) = tree.read().unwrap().left {
+    let t = tree.read().unwrap();
+    if let Some(ref node) = t.left {
         route.push(0);
         traversal(Arc::clone(node), route, detb);
         route.pop();
-    }
-
-    if let Some(ref node) = tree.read().unwrap().right {
-        route.push(1);
-        traversal(Arc::clone(node), route, detb);
-        route.pop();
+    } else {
+        if let Some(ref node) = t.right {
+            route.push(1);
+            traversal(Arc::clone(node), route, detb);
+            route.pop();
+        } else {
+            panic!("BUG!");
+        }
     }
 }
 
 //> generate en[de]code-table
 //- @data：用于生成(编/解)码表的样本数据集
 fn gen_table(data: &[u8]) -> (EncodeTable, DecodeTable) {
-    const TOTAL_CNT: usize = 1 + u8::max_value() as usize;
-    let mut cnter: [(u8, usize); TOTAL_CNT] = [(0, 0); TOTAL_CNT];
-    for i in 0..TOTAL_CNT {
+    const TB_SIZ: usize = 1 + u8::max_value() as usize;
+    let mut cnter: [(u8, usize); TB_SIZ] = [(0, 0); TB_SIZ];
+    for i in 0..TB_SIZ {
         cnter[i].0 = i as u8;
     }
     for i in data {
@@ -101,7 +80,7 @@ fn gen_table(data: &[u8]) -> (EncodeTable, DecodeTable) {
     }
     cnter.sort_unstable_by(|a, b| a.1.cmp(&b.1));
 
-    assert!(2 < TOTAL_CNT);
+    assert!(2 < TB_SIZ);
     let mut root = HuffmanTree {
         left: Some(Arc::new(RwLock::new(HuffmanTree {
             left: None,
@@ -146,12 +125,10 @@ fn gen_table(data: &[u8]) -> (EncodeTable, DecodeTable) {
     let mut route = vec![];
     traversal(Arc::new(RwLock::new(root)), &mut route, &mut detb);
 
-    let mut entb = Vec::with_capacity(TOTAL_CNT);
-    (0..TOTAL_CNT).for_each(|_| {
-        entb.push(vec![]);
-    });
-    for (v, i) in &detb {
-        entb[*i as usize] = v.clone();
+    detb.sort_unstable_by(|a, b|a.1.cmp(&b.1));
+    let mut entb = Vec::with_capacity(TB_SIZ);
+    for (v, _) in &detb {
+        entb.push(v.clone());
     }
 
     (entb, detb)
@@ -245,6 +222,33 @@ fn restore_tree(table: DecodeTable) -> Arc<RwLock<HuffmanTree>> {
     }
 
     root.unwrap()
+}
+
+macro_rules! step_forward {
+    ($encoded: expr, $t: expr, $byte_idx: expr, $bit_idx: expr) => {
+        if check_bit($encoded.data[$byte_idx], $bit_idx) {
+            if let Some(node) = Arc::clone(&$t).read().unwrap().right.as_ref() {
+                $t = Arc::clone(node);
+            } else {
+                return Err(());
+            }
+        } else {
+            if let Some(node) = Arc::clone(&$t).read().unwrap().left.as_ref() {
+                $t = Arc::clone(node);
+            } else {
+                return Err(());
+            }
+        }
+
+        $bit_idx += 1;
+        $bit_idx %= BYTE_BITS;
+        if 0 == $bit_idx {
+            $byte_idx += 1;
+        }
+        if $byte_idx >= $encoded.data.len() {
+            break;
+        }
+    };
 }
 
 //> 首先解码全体数据，之后再将末尾pad_len的数据弹出
