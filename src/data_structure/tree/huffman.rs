@@ -10,6 +10,9 @@
 //! - <font color=Green>√</font> 多线程安全
 //! - <font color=Green>√</font> 无 unsafe 代码
 
+use std::sync::Arc;
+use std::sync::RwLock;
+
 type Byte = u8;
 const BYTE_SIZ: usize = std::mem::size_of::<Byte>();
 
@@ -21,8 +24,8 @@ const BIT_SET: [Byte; 8] = [
 //> 以Byte为对象进行编解码的抽象数据类型，适配所有的数据类型
 type HuffmanTree = Node;
 pub struct Node {
-    left: Option<Box<Node>>,
-    right: Option<Box<Node>>,
+    left: Option<Arc<RwLock<Node>>>,
+    right: Option<Arc<RwLock<Node>>>,
     data: Option<Byte>,
 }
 
@@ -42,14 +45,14 @@ pub struct Encoded {
 macro_rules! walk_on_tree {
     ($encoded: expr, $t: expr, $byte_idx: expr, $bit_idx: expr) => {
         if check_bit($encoded.data[$byte_idx], $bit_idx) {
-            if let Some(ref node) = $t.right {
-                $t = node;
+            if let Some(node) = Arc::clone(&$t).read().unwrap().right.as_ref() {
+                $t = Arc::clone(node);
             } else {
                 return Err(());
             }
         } else {
-            if let Some(ref node) = $t.left {
-                $t = node;
+            if let Some(node) = Arc::clone(&$t).read().unwrap().left.as_ref() {
+                $t = Arc::clone(node);
             } else {
                 return Err(());
             }
@@ -75,8 +78,53 @@ pub trait Huffman {
 
     //> restore the HuffmanTree from a decode-table
     //- @table[in]: code-table for decompression
-    fn restore_tree(table: DecodeTable) -> HuffmanTree {
-        unimplemented!();
+    fn restore_tree(table: DecodeTable) -> Arc<RwLock<HuffmanTree>> {
+        let root = Some(Arc::new(RwLock::new(HuffmanTree {
+            left: None,
+            right: None,
+            data: None,
+        })));
+
+        let mut t = Arc::clone(root.as_ref().unwrap());
+        let mut tt;
+        for (x, v) in table {
+            for i in 0..x.len() {
+                {
+                    tt = Arc::clone(&t);
+                    let mut lt = tt.write().unwrap(); //locked tree
+                    if 0 == x[i] {
+                        match lt.left {
+                            None => {
+                                lt.left = Some(Arc::new(RwLock::new(HuffmanTree {
+                                    left: None,
+                                    right: None,
+                                    data: None,
+                                })));
+                            }
+                            _ => {}
+                        };
+                        t = Arc::clone(lt.left.as_ref().unwrap());
+                    } else {
+                        match lt.right {
+                            None => {
+                                lt.right = Some(Arc::new(RwLock::new(HuffmanTree {
+                                    left: None,
+                                    right: None,
+                                    data: None,
+                                })));
+                            }
+                            _ => {}
+                        }
+                        t = Arc::clone(lt.right.as_ref().unwrap());
+                    }
+                }
+            }
+
+            t.write().unwrap().data = Some(v);
+            t = Arc::clone(root.as_ref().unwrap());
+        }
+
+        root.unwrap()
     }
 
     //> 基本的编码函数——单线程、数据不分片
@@ -115,17 +163,17 @@ pub trait Huffman {
     //- #: 若在末尾pad_len位数据之前出现解码错误，返回Err(())，否则返回Ok(Vec<Byte>)
     //- @encoded[in]: encoded data and meta
     //- @tree[in]: the huffman tree which data has been encoded by
-    fn decode(encoded: &Encoded, tree: &HuffmanTree) -> Result<Vec<Byte>, ()> {
+    fn decode(encoded: &Encoded, tree: Arc<RwLock<HuffmanTree>>) -> Result<Vec<Byte>, ()> {
         let mut res = vec![];
-        let mut t = tree;
+        let mut t = Arc::clone(&tree);
         let mut byte_idx = 0usize;
         let mut bit_idx = 0usize;
 
         loop {
             //非叶点节上不会有数据
-            if let Some(v) = t.data {
+            if let Some(v) = Arc::clone(&t).read().unwrap().data {
                 res.push(v);
-                t = tree;
+                t = Arc::clone(&tree);
             } else {
                 walk_on_tree!(encoded, t, byte_idx, bit_idx);
             }
@@ -136,9 +184,9 @@ pub trait Huffman {
             bit_idx = BYTE_SIZ - encoded.pad_len;
             loop {
                 //非叶点节上不会有数据
-                if let Some(_) = t.data {
+                if let Some(_) = Arc::clone(&t).read().unwrap().data {
                     res.pop();
-                    t = tree;
+                    t = Arc::clone(&tree);
                 } else {
                     walk_on_tree!(encoded, t, byte_idx, bit_idx);
                 }
