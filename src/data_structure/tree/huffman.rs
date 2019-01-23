@@ -13,7 +13,7 @@
 use std::sync::Arc;
 use std::sync::RwLock;
 
-const BYTE_SIZ: usize = std::mem::size_of::<u8>();
+const BYTE_BITS: usize = 8;
 
 //> 预置bit集合，优化位运算的效率
 const BIT_SET: [u8; 8] = [
@@ -37,7 +37,7 @@ type DecodeTable = Vec<(Vec<u8>, u8)>;
 struct Encoded {
     //encoded data received from some sender[s]
     data: Vec<u8>,
-    //the number of bit[s] at the last byte for aligning to BYTE_SIZ
+    //the number of bit[s] at the last byte for aligning to BYTE_BITS
     pad_len: usize,
 }
 
@@ -58,7 +58,7 @@ macro_rules! step_forward {
         }
 
         $bit_idx += 1;
-        $bit_idx %= BYTE_SIZ;
+        $bit_idx %= BYTE_BITS;
         if 0 == $bit_idx {
             $byte_idx += 1;
         }
@@ -163,11 +163,11 @@ fn gen_table(data: &[u8]) -> (EncodeTable, DecodeTable) {
 fn encode(data: &[u8], table: &EncodeTable) -> Encoded {
     //计算编码结果所需空间，超过usize最大值会**panic**
     let mut len = data.iter().map(|i| table[*i as usize].len()).sum();
-    let pad_len = len % BYTE_SIZ;
+    let pad_len = BYTE_BITS - len % BYTE_BITS;
     len = if 0 == pad_len {
-        len / BYTE_SIZ
+        len / BYTE_BITS
     } else {
-        1 + len / BYTE_SIZ
+        1 + len / BYTE_BITS
     };
     let mut res = Encoded {
         data: Vec::with_capacity(len),
@@ -186,7 +186,7 @@ fn encode(data: &[u8], table: &EncodeTable) -> Encoded {
                 res.data[byte_idx] = set_bit(res.data[byte_idx], bit_idx);
             }
             bit_idx += 1;
-            bit_idx %= BYTE_SIZ;
+            bit_idx %= BYTE_BITS;
             if 0 == bit_idx {
                 byte_idx += 1;
             }
@@ -253,30 +253,32 @@ fn restore_tree(table: DecodeTable) -> Arc<RwLock<HuffmanTree>> {
 //- @tree[in]: the huffman tree which data has been encoded by
 fn decode(encoded: &Encoded, tree: Arc<RwLock<HuffmanTree>>) -> Result<Vec<u8>, ()> {
     let mut res = vec![];
-    let mut t = Arc::clone(&tree);
-    let mut byte_idx = 0usize;
-    let mut bit_idx = 0usize;
 
-    loop {
-        //非叶点节上不会有数据
-        if let Some(v) = Arc::clone(&t).read().unwrap().data {
-            res.push(v);
-            t = Arc::clone(&tree);
-        } else {
-            step_forward!(encoded, t, byte_idx, bit_idx);
-        }
-    }
-
-    if 0 < encoded.pad_len {
-        byte_idx = encoded.data.len() - 1;
-        bit_idx = BYTE_SIZ - encoded.pad_len;
+    if 0 < encoded.data.len() {
+        let mut t = Arc::clone(&tree);
+        let mut byte_idx = 0usize;
+        let mut bit_idx = 0usize;
         loop {
             //非叶点节上不会有数据
-            if let Some(_) = Arc::clone(&t).read().unwrap().data {
-                res.pop();
+            if let Some(v) = Arc::clone(&t).read().unwrap().data {
+                res.push(v);
                 t = Arc::clone(&tree);
             } else {
                 step_forward!(encoded, t, byte_idx, bit_idx);
+            }
+        }
+
+        if 0 < encoded.pad_len {
+            byte_idx = encoded.data.len() - 1;
+            bit_idx = BYTE_BITS - encoded.pad_len;
+            loop {
+                //非叶点节上不会有数据
+                if let Some(_) = Arc::clone(&t).read().unwrap().data {
+                    res.pop();
+                    t = Arc::clone(&tree);
+                } else {
+                    step_forward!(encoded, t, byte_idx, bit_idx);
+                }
             }
         }
     }
@@ -305,15 +307,33 @@ fn set_bit(data: u8, n: usize) -> u8 {
 mod tests {
     use super::*;
     //use rayon::prelude::*;
-    //use std::collections::HashMap;
+
+    fn worker(base: &[u8], source: &[u8]) -> Vec<u8> {
+        let (entb, detb) = gen_table(&base);
+        let tree = restore_tree(detb);
+        let encoded = encode(&source, &entb);
+
+        decode(&encoded, tree).unwrap()
+    }
 
     #[test]
     fn huffman() {
-        let base = r#"a;lkjf;中国lhgqk;z`3`3@#$&^%&*^(*)_*)lqjpogjqpojr[ qpk['gkvlosdnh[2 lll3-48512719oa\ anv;ksanklgjaljgl;kaj]'=>"#;
-        let (entb, detb) = gen_table(base.as_bytes());
+        let base = [
+            1u8, 1u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 2u8,
+            2u8, 2u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 3u8, 3u8,
+            3u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 3u8, 3u8, 3u8,
+            0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 2u8, 2u8, 2u8, 0u8,
+            0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8,
+        ];
         let source = base;
-        let result = decode(&encode(source.as_bytes(), &entb), restore_tree(detb)).unwrap();
-        let result = String::from_utf8_lossy(&result);
-        assert_eq!(source, result);
+        assert_eq!(source[..], worker(&base, &source)[..]);
+
+        let base = r"000000000000000000000000000a01201234012345678956789345678000000000
+            ;lkjf;中国lhgqk;z`3`3@#$&^%&*^(*)_*)lqjpogjqpojr[ qpk['gkvlosdnh[2 lll1271>";
+        let source = base;
+        assert_eq!(
+            *source.as_bytes(),
+            worker(base.as_bytes(), source.as_bytes())[..]
+        );
     }
 }
