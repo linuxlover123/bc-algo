@@ -13,31 +13,30 @@
 use std::sync::Arc;
 use std::sync::RwLock;
 
-type Byte = u8;
-const BYTE_SIZ: usize = std::mem::size_of::<Byte>();
+const BYTE_SIZ: usize = std::mem::size_of::<u8>();
 
 //> 预置bit集合，优化位运算的效率
-const BIT_SET: [Byte; 8] = [
+const BIT_SET: [u8; 8] = [
     0b00000001, 0b00000010, 0b00000100, 0b00001000, 0b00010000, 0b00100000, 0b01000000, 0b10000000,
 ];
 
-//> 以Byte为对象进行编解码的抽象数据类型，适配所有的数据类型
+//> 以u8为对象进行编解码的抽象数据类型，适配所有的数据类型
 type HuffmanTree = Node;
 struct Node {
     left: Option<Arc<RwLock<Node>>>,
     right: Option<Arc<RwLock<Node>>>,
-    data: Option<Byte>,
+    data: Option<u8>,
 }
 
 //> 编码表使用线性索引以优化性能
-type EncodeTable = Vec<Vec<Byte>>;
+type EncodeTable = Vec<Vec<u8>>;
 //> 解码表的用途仅是还原huffman tree，无需索引，亦与存储顺序无关
-type DecodeTable = Vec<(Vec<Byte>, Byte)>;
+type DecodeTable = Vec<(Vec<u8>, u8)>;
 
 //> 解码需要的信息
 struct Encoded {
     //encoded data received from some sender[s]
-    data: Vec<Byte>,
+    data: Vec<u8>,
     //the number of bit[s] at the last byte for aligning to BYTE_SIZ
     pad_len: usize,
 }
@@ -69,41 +68,37 @@ macro_rules! step_forward {
     };
 }
 
-fn preorder_traversal(
-    tree: Arc<RwLock<HuffmanTree>>,
-    route: &mut Vec<Byte>,
-    entb: &mut Vec<Vec<Byte>>,
-) {
+//> walk on tree
+fn traversal(tree: Arc<RwLock<HuffmanTree>>, route: &mut Vec<u8>, detb: &mut Vec<(Vec<u8>, u8)>) {
     if let Some(v) = tree.read().unwrap().data {
-        entb[v as usize] = route.clone();
+        detb.push((route.clone(), v));
         return;
     }
 
     if let Some(ref node) = tree.read().unwrap().left {
         route.push(0);
-        preorder_traversal(Arc::clone(node), route, entb);
+        traversal(Arc::clone(node), route, detb);
         route.pop();
     }
 
     if let Some(ref node) = tree.read().unwrap().right {
         route.push(1);
-        preorder_traversal(Arc::clone(node), route, entb);
+        traversal(Arc::clone(node), route, detb);
         route.pop();
     }
 }
 
 //> generate en[de]code-table
 //- @data：用于生成(编/解)码表的样本数据集
-fn gen_table(data: &[Byte]) -> (EncodeTable, DecodeTable) {
-    const TOTAL_CNT: usize = 1 + Byte::max_value() as usize;
-    let mut cnter: [(Byte, usize); TOTAL_CNT] = [(0, 0); TOTAL_CNT];
+fn gen_table(data: &[u8]) -> (EncodeTable, DecodeTable) {
+    const TOTAL_CNT: usize = 1 + u8::max_value() as usize;
+    let mut cnter: [(u8, usize); TOTAL_CNT] = [(0, 0); TOTAL_CNT];
     for i in 0..TOTAL_CNT {
-        cnter[i].0 = i as Byte;
+        cnter[i].0 = i as u8;
     }
     for i in data {
         cnter[*i as usize].1 += 1;
     }
-
     cnter.sort_unstable_by(|a, b| a.1.cmp(&b.1));
 
     assert!(2 < TOTAL_CNT);
@@ -147,12 +142,16 @@ fn gen_table(data: &[Byte]) -> (EncodeTable, DecodeTable) {
         prev_weight += cnter[i].1;
     }
 
-    let mut entb: Vec<Vec<Byte>> = Vec::with_capacity(TOTAL_CNT);
     let mut detb = vec![];
     let mut route = vec![];
-    preorder_traversal(Arc::new(RwLock::new(root)), &mut route, &mut entb);
-    for i in 0..entb.len() {
-        detb.push((entb[i].clone(), i as Byte))
+    traversal(Arc::new(RwLock::new(root)), &mut route, &mut detb);
+
+    let mut entb = Vec::with_capacity(TOTAL_CNT);
+    (0..TOTAL_CNT).for_each(|_| {
+        entb.push(vec![]);
+    });
+    for (v, i) in &detb {
+        entb[*i as usize] = v.clone();
     }
 
     (entb, detb)
@@ -161,22 +160,29 @@ fn gen_table(data: &[Byte]) -> (EncodeTable, DecodeTable) {
 //> 基本的编码函数——单线程、数据不分片
 //- @data[in]: those to be encoded
 //- @table[in]: code-table for compression
-fn encode(data: &[Byte], table: &EncodeTable) -> Encoded {
+fn encode(data: &[u8], table: &EncodeTable) -> Encoded {
     //计算编码结果所需空间，超过usize最大值会**panic**
     let mut len = data.iter().map(|i| table[*i as usize].len()).sum();
     let pad_len = len % BYTE_SIZ;
-    len = if 0 == pad_len { len / 8 } else { 1 + len / 8 };
+    len = if 0 == pad_len {
+        len / BYTE_SIZ
+    } else {
+        1 + len / BYTE_SIZ
+    };
     let mut res = Encoded {
         data: Vec::with_capacity(len),
         pad_len: pad_len,
     };
+    (0..len).for_each(|_| {
+        res.data.push(0u8);
+    });
 
     //编码
     let mut byte_idx = 0usize;
     let mut bit_idx = 0usize;
     for i in 0..data.len() {
         for j in table[data[i] as usize].iter() {
-            if 1 as Byte == *j {
+            if 1u8 == *j {
                 res.data[byte_idx] = set_bit(res.data[byte_idx], bit_idx);
             }
             bit_idx += 1;
@@ -242,10 +248,10 @@ fn restore_tree(table: DecodeTable) -> Arc<RwLock<HuffmanTree>> {
 }
 
 //> 首先解码全体数据，之后再将末尾pad_len的数据弹出
-//- #: 若在末尾pad_len位数据之前出现解码错误，返回Err(())，否则返回Ok(Vec<Byte>)
+//- #: 若在末尾pad_len位数据之前出现解码错误，返回Err(())，否则返回Ok(Vec<u8>)
 //- @encoded[in]: encoded data and meta
 //- @tree[in]: the huffman tree which data has been encoded by
-fn decode(encoded: &Encoded, tree: Arc<RwLock<HuffmanTree>>) -> Result<Vec<Byte>, ()> {
+fn decode(encoded: &Encoded, tree: Arc<RwLock<HuffmanTree>>) -> Result<Vec<u8>, ()> {
     let mut res = vec![];
     let mut t = Arc::clone(&tree);
     let mut byte_idx = 0usize;
@@ -281,7 +287,7 @@ fn decode(encoded: &Encoded, tree: Arc<RwLock<HuffmanTree>>) -> Result<Vec<Byte>
 //> n取值范围：[0, 7]
 //- #: 若第n位bit为1，返回true，否则返回false
 #[inline]
-fn check_bit(data: Byte, n: usize) -> bool {
+fn check_bit(data: u8, n: usize) -> bool {
     if 0 < data & BIT_SET[n] {
         true
     } else {
@@ -289,18 +295,25 @@ fn check_bit(data: Byte, n: usize) -> bool {
     }
 }
 
-//> It is cheaper to return a Byte than use a pointer
+//> It is cheaper to return a u8 than use a pointer
 #[inline]
-fn set_bit(data: Byte, n: usize) -> Byte {
+fn set_bit(data: u8, n: usize) -> u8 {
     data | BIT_SET[n]
 }
 
 #[cfg(test)]
 mod tests {
-    //use super::*;
+    use super::*;
     //use rayon::prelude::*;
     //use std::collections::HashMap;
 
     #[test]
-    fn huffman() {}
+    fn huffman() {
+        let base = r#"a;lkjf;中国lhgqk;z`3`3@#$&^%&*^(*)_*)lqjpogjqpojr[ qpk['gkvlosdnh[2 lll3-48512719oa\ anv;ksanklgjaljgl;kaj]'=>"#;
+        let (entb, detb) = gen_table(base.as_bytes());
+        let source = base;
+        let result = decode(&encode(source.as_bytes(), &entb), restore_tree(detb)).unwrap();
+        let result = String::from_utf8_lossy(&result);
+        assert_eq!(source, result);
+    }
 }
