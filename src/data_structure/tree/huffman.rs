@@ -221,33 +221,6 @@ fn restore_tree(table: DecodeTable) -> Arc<RwLock<HuffmanTree>> {
     root.unwrap()
 }
 
-macro_rules! step_forward {
-    ($encoded: expr, $t: expr, $byte_idx: expr, $bit_idx: expr) => {
-        if check_bit($encoded.data[$byte_idx], $bit_idx) {
-            if let Some(node) = Arc::clone(&$t).read().unwrap().right.as_ref() {
-                $t = Arc::clone(node);
-            } else {
-                return Err(());
-            }
-        } else {
-            if let Some(node) = Arc::clone(&$t).read().unwrap().left.as_ref() {
-                $t = Arc::clone(node);
-            } else {
-                return Err(());
-            }
-        }
-
-        $bit_idx += 1;
-        if $byte_idx == $encoded.data.len() - 1 && $bit_idx == BYTE_BITS - $encoded.pad_len {
-            break;
-        }
-        if BYTE_BITS == $bit_idx {
-            $byte_idx += 1;
-            $bit_idx %= BYTE_BITS;
-        }
-    };
-}
-
 //> 首先解码全体数据，之后再将末尾pad_len的数据弹出
 //- #: 若在末尾pad_len位数据之前出现解码错误，返回Err(())，否则返回Ok(Vec<u8>)
 //- @encoded[in]: encoded data and meta
@@ -260,12 +233,33 @@ fn decode(encoded: &Encoded, tree: Arc<RwLock<HuffmanTree>>) -> Result<Vec<u8>, 
         let mut byte_idx = 0usize;
         let mut bit_idx = 0usize;
         loop {
-            //非叶点节上不会有数据
+            if check_bit(encoded.data[byte_idx], bit_idx) {
+                if let Some(node) = Arc::clone(&t).read().unwrap().right.as_ref() {
+                    t = Arc::clone(node);
+                } else {
+                    return Err(());
+                }
+            } else {
+                if let Some(node) = Arc::clone(&t).read().unwrap().left.as_ref() {
+                    t = Arc::clone(node);
+                } else {
+                    return Err(());
+                }
+            }
+
+            //no data will exists on root&&non-leaf nodes
             if let Some(v) = Arc::clone(&t).read().unwrap().data {
                 res.push(v);
                 t = Arc::clone(&tree);
-            } else {
-                step_forward!(encoded, t, byte_idx, bit_idx);
+            }
+
+            bit_idx += 1;
+            if byte_idx == encoded.data.len() - 1 && bit_idx == BYTE_BITS - encoded.pad_len {
+                break;
+            }
+            if BYTE_BITS == bit_idx {
+                byte_idx += 1;
+                bit_idx %= BYTE_BITS;
             }
         }
     }
