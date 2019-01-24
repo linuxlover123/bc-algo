@@ -305,7 +305,7 @@ mod tests {
     fn huffman() {
         let base = (0..100_0000).map(|_| random::<u8>()).collect::<Vec<u8>>();
         for _i in 0..1000 {
-            let source = (0..100).map(|_| random::<u8>()).collect::<Vec<u8>>();
+            let source = (0..100 + random::<u16>() % 999).map(|_| random::<u8>()).collect::<Vec<u8>>();
             assert_eq!(source, worker(&base, &source));
         }
 
