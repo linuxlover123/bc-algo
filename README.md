@@ -15,6 +15,12 @@ cargo doc --open
 ```
 
 ## 完成进度
+
+#### 链表
+> Linked List
+> - [x] one-way linked list
+> - [x] two-way linked list
+
 #### 树
 > Tree
 > - [x] huffman tree
@@ -40,11 +46,6 @@ cargo doc --open
 > Bloom Filter
 > - [ ] partial bloom filter
 > - [ ] counting bloom filter
-
-#### 链表
-> Linked List
-> - [x] one-way linked list
-> - [x] two-way linked list
 
 #### 序列化与反序列化
 > Serialize and Deserialize
