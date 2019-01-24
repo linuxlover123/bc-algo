@@ -292,6 +292,7 @@ fn set_bit(data: u8, n: usize) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::random;
 
     fn worker(base: &[u8], source: &[u8]) -> Vec<u8> {
         let (entb, detb) = gen_table(base);
@@ -302,15 +303,11 @@ mod tests {
 
     #[test]
     fn huffman() {
-        let base = [
-            1u8, 1u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 2u8,
-            2u8, 2u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 3u8, 3u8,
-            3u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 3u8, 3u8, 3u8,
-            0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 2u8, 2u8, 2u8, 0u8,
-            0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8,
-        ];
-        let source = vec![99u8, 1u8];
-        assert_eq!(source, worker(&base, &source));
+        let base = (0..100_0000).map(|_| random::<u8>()).collect::<Vec<u8>>();
+        for _i in 0..1000 {
+            let source = (0..100).map(|_| random::<u8>()).collect::<Vec<u8>>();
+            assert_eq!(source, worker(&base, &source));
+        }
 
         let base = r"000000000000000000000000000a01201234012345678956789345678000000000
             ;lkjf;中国lhgqk;z`3`3@#$&^%&*^(*)_*)lqjpogjqpojr[ qpk['gkvlosdnh[2 lll1271>";
