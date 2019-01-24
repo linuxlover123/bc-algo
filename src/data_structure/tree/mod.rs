@@ -1,5 +1,4 @@
-//! ## tree
-//! #### 树
+//! ## 树
 //! - huffman tree
 //! - merkle tree
 //! - sorted merkle tree

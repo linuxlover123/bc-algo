@@ -16,6 +16,11 @@ cargo doc --open
 
 ## 完成进度
 
+#### 布隆过滤器
+> Bloom Filter
+> - [x] partial bloom filter
+> - [x] counting bloom filter
+
 #### 链表
 > Linked List
 > - [x] one-way linked list
@@ -41,11 +46,6 @@ cargo doc --open
 > - [ ] base graph
 > - [ ] base net
 > - [ ] complex net
-
-#### 布隆过滤器
-> Bloom Filter
-> - [ ] partial bloom filter
-> - [ ] counting bloom filter
 
 #### 序列化与反序列化
 > Serialize and Deserialize
