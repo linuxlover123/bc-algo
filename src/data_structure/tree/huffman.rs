@@ -15,33 +15,32 @@ use std::sync::RwLock;
 
 const BYTE_BITS: usize = 8;
 
-//> 预置bit集合，优化位运算的效率
+//预置bit集合，优化位运算的效率
 const BIT_SET: [u8; 8] = [
     0b00000001, 0b00000010, 0b00000100, 0b00001000, 0b00010000, 0b00100000, 0b01000000, 0b10000000,
 ];
 
-//> 以u8为对象进行编解码的抽象数据类型，适配所有的数据类型
-type HuffmanTree = Node;
-struct Node {
-    left: Option<Arc<RwLock<Node>>>,
-    right: Option<Arc<RwLock<Node>>>,
+///以u8为对象进行编解码的抽象数据类型，适配所有的数据类型
+pub struct HuffmanTree {
+    left: Option<Arc<RwLock<HuffmanTree>>>,
+    right: Option<Arc<RwLock<HuffmanTree>>>,
     data: Option<u8>,
 }
 
-//> 编码表使用线性索引以优化性能
+//编码表使用线性索引以优化性能
 type EncodeTable = Vec<Vec<u8>>;
-//> 解码表的用途仅是还原huffman tree，无需索引，亦与存储顺序无关
+//解码表的用途仅是还原huffman tree，无需索引，亦与存储顺序无关
 type DecodeTable = Vec<(Vec<u8>, u8)>;
 
-//> 解码需要的信息
-struct Encoded {
+///解码需要的信息
+pub struct Encoded {
     //encoded data received from some sender[s]
     data: Vec<u8>,
     //the number of bit[s] at the last byte for aligning to BYTE_BITS
     pad_len: usize,
 }
 
-//> walk on tree
+//walk on tree
 //- @tree: huffman tree
 //- @route: routing path of a leaf node
 //- @detb: decode-table
@@ -64,9 +63,9 @@ fn traversal(tree: Arc<RwLock<HuffmanTree>>, route: &mut Vec<u8>, detb: &mut Vec
     }
 }
 
-//> generate en[de]code-table
-//- @data：用于生成(编/解)码表的样本数据集
-fn gen_table(data: &[u8]) -> (EncodeTable, DecodeTable) {
+///generate en[de]code-table
+///- @data：用于生成(编/解)码表的样本数据集
+pub fn gen_table(data: &[u8]) -> (EncodeTable, DecodeTable) {
     const TB_SIZ: usize = 1 + u8::max_value() as usize;
     let mut cnter: [(u8, usize); TB_SIZ] = [(0, 0); TB_SIZ];
     for i in 0..TB_SIZ {
@@ -131,10 +130,10 @@ fn gen_table(data: &[u8]) -> (EncodeTable, DecodeTable) {
     (entb, detb)
 }
 
-//> 基本的编码函数——单线程、数据不分片
-//- @data[in]: those to be encoded
-//- @table[in]: code-table for compression
-fn encode(data: &[u8], table: &EncodeTable) -> Encoded {
+///基本的编码函数——单线程、数据不分片
+///- @data[in]: those to be encoded
+///- @table[in]: code-table for compression
+pub fn encode(data: &[u8], table: &EncodeTable) -> Encoded {
     //计算编码结果所需空间，超过usize最大值会**panic**
     let mut len = data.iter().map(|i| table[*i as usize].len()).sum();
     let pad_len = (BYTE_BITS - len % BYTE_BITS) % BYTE_BITS;
@@ -170,9 +169,9 @@ fn encode(data: &[u8], table: &EncodeTable) -> Encoded {
     res
 }
 
-//> restore the HuffmanTree from a decode-table
-//- @table[in]: code-table for decompression
-fn restore_tree(table: DecodeTable) -> Arc<RwLock<HuffmanTree>> {
+///restore the HuffmanTree from a decode-table
+///- @table[in]: code-table for decompression
+pub fn restore_tree(table: DecodeTable) -> Arc<RwLock<HuffmanTree>> {
     let root = Some(Arc::new(RwLock::new(HuffmanTree {
         left: None,
         right: None,
@@ -221,11 +220,11 @@ fn restore_tree(table: DecodeTable) -> Arc<RwLock<HuffmanTree>> {
     root.unwrap()
 }
 
-//> 首先解码全体数据，之后再将末尾pad_len的数据弹出
-//- #: 若在末尾pad_len位数据之前出现解码错误，返回Err(())，否则返回Ok(Vec<u8>)
-//- @encoded[in]: encoded data and meta
-//- @tree[in]: the huffman tree which data has been encoded by
-fn decode(encoded: &Encoded, tree: Arc<RwLock<HuffmanTree>>) -> Result<Vec<u8>, ()> {
+///首先解码全体数据，之后再将末尾pad_len的数据弹出
+///- #: 若在末尾pad_len位数据之前出现解码错误，返回Err(())，否则返回Ok(Vec<u8>)
+///- @encoded[in]: encoded data and meta
+///- @tree[in]: the huffman tree which data has been encoded by
+pub fn decode(encoded: &Encoded, tree: Arc<RwLock<HuffmanTree>>) -> Result<Vec<u8>, ()> {
     let mut res = vec![];
 
     if 0 < encoded.data.len() {
@@ -267,7 +266,7 @@ fn decode(encoded: &Encoded, tree: Arc<RwLock<HuffmanTree>>) -> Result<Vec<u8>, 
     Ok(res)
 }
 
-//> n取值范围：[0, 7]
+//n取值范围：[0, 7]
 //- #: 若第n位bit为1，返回true，否则返回false
 #[inline]
 fn check_bit(data: u8, n: usize) -> bool {
@@ -278,7 +277,7 @@ fn check_bit(data: u8, n: usize) -> bool {
     }
 }
 
-//> It is cheaper to return a u8 than use a pointer
+//It is cheaper to return a u8 than use a pointer
 #[inline]
 fn set_bit(data: u8, n: usize) -> u8 {
     data | BIT_SET[n]
