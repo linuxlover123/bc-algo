@@ -1,10 +1,10 @@
 //! ## 哈夫曼编码
 //!
 //! #### 算法说明
-//! - 一种前缀树。
+//! - 一种前缀树——无共同前缀树或唯一前缀树。
 //!
 //! #### 应用场景
-//! - 数据压缩。
+//! - 通过将定长编码转换为变长编码的方式，实现数据的无损压缩。
 //!
 //! #### 实现属性
 //! - <font color=Green>√</font> 多线程安全
@@ -32,7 +32,7 @@ type EncodeTable = Vec<Vec<u8>>;
 //解码表的用途仅是还原huffman tree，无需索引，亦与存储顺序无关
 type DecodeTable = Vec<(Vec<u8>, u8)>;
 
-///解码需要的信息
+///解码所需要的信息
 pub struct Encoded {
     //encoded data received from some sender[s]
     data: Vec<u8>,
@@ -41,16 +41,16 @@ pub struct Encoded {
 }
 
 //walk on tree
-//- @tree: huffman tree
-//- @route: routing path of a leaf node
-//- @detb: decode-table
+//- @tree[in]: huffman tree
+//- @route[in]: routing path of a leaf node, used for middle cache
+//- @detb[out]: decode-table
 fn traversal(tree: Arc<RwLock<HuffmanTree>>, route: &mut Vec<u8>, detb: &mut Vec<(Vec<u8>, u8)>) {
-    if let Some(v) = tree.read().unwrap().data {
+    let t = tree.read().unwrap();
+
+    if let Some(v) = t.data {
         detb.push((route.clone(), v));
         return;
     }
-
-    let t = tree.read().unwrap();
     if let Some(ref node) = t.left {
         route.push(0);
         traversal(Arc::clone(node), route, detb);
