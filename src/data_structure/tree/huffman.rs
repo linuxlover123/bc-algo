@@ -137,7 +137,7 @@ fn gen_table(data: &[u8]) -> (EncodeTable, DecodeTable) {
 fn encode(data: &[u8], table: &EncodeTable) -> Encoded {
     //计算编码结果所需空间，超过usize最大值会**panic**
     let mut len = data.iter().map(|i| table[*i as usize].len()).sum();
-    let pad_len = BYTE_BITS - len % BYTE_BITS;
+    let pad_len = (BYTE_BITS - len % BYTE_BITS) % BYTE_BITS;
     len = if 0 == pad_len {
         len / BYTE_BITS
     } else {
@@ -160,9 +160,9 @@ fn encode(data: &[u8], table: &EncodeTable) -> Encoded {
                 res.data[byte_idx] = set_bit(res.data[byte_idx], bit_idx);
             }
             bit_idx += 1;
-            bit_idx %= BYTE_BITS;
-            if 0 == bit_idx {
+            if BYTE_BITS == bit_idx {
                 byte_idx += 1;
+                bit_idx %= BYTE_BITS;
             }
         }
     }
@@ -238,12 +238,12 @@ macro_rules! step_forward {
         }
 
         $bit_idx += 1;
-        $bit_idx %= BYTE_BITS;
-        if 0 == $bit_idx {
-            $byte_idx += 1;
-        }
-        if $byte_idx >= $encoded.data.len() {
+        if $byte_idx == $encoded.data.len() - 1 && $bit_idx == BYTE_BITS - $encoded.pad_len {
             break;
+        }
+        if BYTE_BITS == $bit_idx {
+            $byte_idx += 1;
+            $bit_idx %= BYTE_BITS;
         }
     };
 }
@@ -266,20 +266,6 @@ fn decode(encoded: &Encoded, tree: Arc<RwLock<HuffmanTree>>) -> Result<Vec<u8>, 
                 t = Arc::clone(&tree);
             } else {
                 step_forward!(encoded, t, byte_idx, bit_idx);
-            }
-        }
-
-        if 0 < encoded.pad_len {
-            byte_idx = encoded.data.len() - 1;
-            bit_idx = BYTE_BITS - encoded.pad_len;
-            loop {
-                //非叶点节上不会有数据
-                if let Some(_) = Arc::clone(&t).read().unwrap().data {
-                    res.pop();
-                    t = Arc::clone(&tree);
-                } else {
-                    step_forward!(encoded, t, byte_idx, bit_idx);
-                }
             }
         }
     }
@@ -326,7 +312,7 @@ mod tests {
             0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 2u8, 2u8, 2u8, 0u8,
             0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8,
         ];
-        let source = base;
+        let source = [99u8, 1u8];
         assert_eq!(source[..], worker(&base, &source)[..]);
 
         let base = r"000000000000000000000000000a01201234012345678956789345678000000000
