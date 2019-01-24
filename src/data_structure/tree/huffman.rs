@@ -1,7 +1,7 @@
 //! ## 哈夫曼编码
 //!
 //! #### 算法说明
-//! - 一种前缀树——无共同前缀树或唯一前缀树。
+//! - 一种前缀树：无共同前缀树。
 //!
 //! #### 应用场景
 //! - 通过将定长编码转换为变长编码的方式，实现数据的无损压缩。
@@ -10,10 +10,11 @@
 //! - <font color=Green>√</font> 多线程安全
 //! - <font color=Green>√</font> 无 unsafe 代码
 
+use rayon::prelude::*;
 use std::sync::Arc;
-use std::sync::RwLock;
 
 const BYTE_BITS: usize = 8;
+const MB: usize = 1024 * 1024;
 
 //预置bit集合，优化位运算的效率
 const BIT_SET: [u8; 8] = [
@@ -22,15 +23,15 @@ const BIT_SET: [u8; 8] = [
 
 ///以u8为对象进行编解码的抽象数据类型，适配所有的数据类型
 pub struct HuffmanTree {
-    left: Option<Arc<RwLock<HuffmanTree>>>,
-    right: Option<Arc<RwLock<HuffmanTree>>>,
+    left: Option<Arc<HuffmanTree>>,
+    right: Option<Arc<HuffmanTree>>,
     data: Option<u8>,
 }
 
-//编码表使用线性索引以优化性能
+//使用线性索引以优化性能，以Byte自身为索引
+//解码表的值为每个Byte及对应的权重
 type EncodeTable = Vec<Vec<u8>>;
-//解码表的用途仅是还原huffman tree，无需索引，亦与存储顺序无关
-type DecodeTable = Vec<(Vec<u8>, u8)>;
+type DecodeTable = Vec<(u8, usize)>;
 
 ///解码所需要的信息
 pub struct Encoded {
@@ -40,63 +41,57 @@ pub struct Encoded {
     pad_len: usize,
 }
 
+pub struct Source<'a> {
+    data: Arc<&'a [u8]>,
+    //需要处理的数据区域索引范围：[start_idx, end_idx)
+    section: [usize; 2],
+}
+
 //walk on tree
 //- @tree[in]: huffman tree
 //- @route[in]: routing path of a leaf node, used for middle cache
-//- @detb[out]: decode-table
-fn traversal(tree: Arc<RwLock<HuffmanTree>>, route: &mut Vec<u8>, detb: &mut Vec<(Vec<u8>, u8)>) {
-    let t = tree.read().unwrap();
-
-    if let Some(v) = t.data {
-        detb.push((route.clone(), v));
+//- @entb_orig[out]: middle-result of entb
+fn traversal(tree: Arc<HuffmanTree>, route: &mut Vec<u8>, entb_orig: &mut Vec<(Vec<u8>, u8)>) {
+    if let Some(v) = tree.data {
+        entb_orig.push((route.clone(), v));
         return;
     }
-    if let Some(ref node) = t.left {
+    if let Some(ref node) = tree.left {
         route.push(0);
-        traversal(Arc::clone(node), route, detb);
+        traversal(Arc::clone(node), route, entb_orig);
         route.pop();
     }
-    if let Some(ref node) = t.right {
+    if let Some(ref node) = tree.right {
         route.push(1);
-        traversal(Arc::clone(node), route, detb);
+        traversal(Arc::clone(node), route, entb_orig);
         route.pop();
     }
 }
 
-///generate en[de]code-table
-///- @data：用于生成(编/解)码表的样本数据集
-pub fn gen_table(data: &[u8]) -> (EncodeTable, DecodeTable) {
-    const TB_SIZ: usize = 1 + u8::max_value() as usize;
-    let mut cnter: [(u8, usize); TB_SIZ] = [(0, 0); TB_SIZ];
-    for i in 0..TB_SIZ {
-        cnter[i].0 = i as u8;
-    }
-    for i in data {
-        cnter[*i as usize].1 += 1;
-    }
-    cnter.sort_unstable_by(|a, b| a.1.cmp(&b.1));
-
-    assert!(2 < TB_SIZ);
+///gen the HuffmanTree from a decode-table
+///- @table[in]: code-table for decompression
+pub fn gen_tree(table: &DecodeTable) -> HuffmanTree {
+    assert!(2 < table.len());
     let mut root = HuffmanTree {
-        left: Some(Arc::new(RwLock::new(HuffmanTree {
+        left: Some(Arc::new(HuffmanTree {
             left: None,
             right: None,
-            data: Some(cnter[0].0),
-        }))),
-        right: Some(Arc::new(RwLock::new(HuffmanTree {
+            data: Some(table[0].0),
+        })),
+        right: Some(Arc::new(HuffmanTree {
             left: None,
             right: None,
-            data: Some(cnter[1].0),
-        }))),
+            data: Some(table[1].0),
+        })),
         data: None,
     };
 
-    let mut prev_weight = cnter[0].1 + cnter[1].1;
-    for i in 2..cnter.len() {
+    let mut prev_weight = table[0].1 + table[1].1;
+    for i in 2..table.len() {
         let leaf = HuffmanTree {
             left: None,
             right: None,
-            data: Some(cnter[i].0),
+            data: Some(table[i].0),
         };
 
         let mut r = HuffmanTree {
@@ -105,36 +100,86 @@ pub fn gen_table(data: &[u8]) -> (EncodeTable, DecodeTable) {
             data: None,
         };
 
-        if cnter[i].1 <= prev_weight {
-            r.left = Some(Arc::new(RwLock::new(leaf)));
-            r.right = Some(Arc::new(RwLock::new(root)));
+        if table[i].1 <= prev_weight {
+            r.left = Some(Arc::new(leaf));
+            r.right = Some(Arc::new(root));
         } else {
-            r.left = Some(Arc::new(RwLock::new(root)));
-            r.right = Some(Arc::new(RwLock::new(leaf)));
+            r.left = Some(Arc::new(root));
+            r.right = Some(Arc::new(leaf));
         }
 
         root = r;
-        prev_weight += cnter[i].1;
+        prev_weight += table[i].1;
     }
 
-    let mut detb = vec![];
-    let mut route = vec![];
-    traversal(Arc::new(RwLock::new(root)), &mut route, &mut detb);
+    root
+}
+
+///generate en[de]code-table
+///- @data：用于生成(编/解)码表的样本数据集
+pub fn gen_table(data: &[u8]) -> (EncodeTable, DecodeTable) {
+    const TB_SIZ: usize = 1 + u8::max_value() as usize;
+    let mut detb = Vec::with_capacity(TB_SIZ);
+    for i in 0..TB_SIZ {
+        detb.push((i as u8, 0));
+    }
+    for i in data {
+        detb[*i as usize].1 += 1;
+    }
 
     detb.sort_unstable_by(|a, b| a.1.cmp(&b.1));
+    let root = gen_tree(&detb);
+
+    let mut entb_orig = vec![];
+    let mut route = vec![];
+    traversal(Arc::new(root), &mut route, &mut entb_orig);
+
     let mut entb = Vec::with_capacity(TB_SIZ);
-    for (v, _) in &detb {
-        entb.push(v.clone());
-    }
+    entb_orig.sort_unstable_by(|a, b| a.1.cmp(&b.1));
+    entb_orig.into_iter().for_each(|(v, _)| entb.push(v));
 
     (entb, detb)
 }
 
-///基本的编码函数——单线程、数据不分片
+///并行编码函数，大于1MB的数据分片
 ///- @data[in]: those to be encoded
 ///- @table[in]: code-table for compression
-pub fn encode(data: &[u8], table: &EncodeTable) -> Encoded {
+pub fn encode_batch(data: &[u8], table: &EncodeTable) -> Vec<Encoded> {
+    let data = Arc::new(data);
+    let table = Arc::new(table);
+    if MB < data.len() {
+        let mut i = 0;
+        let mut d = vec![];
+        while i < data.len() {
+            d.push(Source {
+                data: Arc::clone(&data),
+                section: [i, i + MB],
+            });
+            i += MB;
+        }
+
+        return d
+            .into_par_iter()
+            .map(|part| encode(part, Arc::clone(&table)))
+            .collect::<Vec<Encoded>>();
+    } else {
+        let end = data.len();
+        return vec![encode(
+            Source {
+                data,
+                section: [0, end],
+            },
+            table,
+        )];
+    }
+}
+
+///基本的编码函数，数据不分片
+///- @data[in]: those to be encoded
+///- @table[in]: code-table for compression
+pub fn encode(source: Source, table: Arc<&EncodeTable>) -> Encoded {
     //计算编码结果所需空间，超过usize最大值会**panic**
+    let data = &source.data[source.section[0]..source.section[1]];
     let mut len = data.iter().map(|i| table[*i as usize].len()).sum();
     let pad_len = (BYTE_BITS - len % BYTE_BITS) % BYTE_BITS;
     len = if 0 == pad_len {
@@ -142,15 +187,16 @@ pub fn encode(data: &[u8], table: &EncodeTable) -> Encoded {
     } else {
         1 + len / BYTE_BITS
     };
+
+    //执行编码
     let mut res = Encoded {
         data: Vec::with_capacity(len),
         pad_len: pad_len,
     };
-    (0..len).for_each(|_| {
+    for _ in 0..len {
         res.data.push(0u8);
-    });
+    }
 
-    //编码
     let mut byte_idx = 0usize;
     let mut bit_idx = 0usize;
     for i in 0..data.len() {
@@ -169,62 +215,22 @@ pub fn encode(data: &[u8], table: &EncodeTable) -> Encoded {
     res
 }
 
-///restore the HuffmanTree from a decode-table
-///- @table[in]: code-table for decompression
-pub fn restore_tree(table: DecodeTable) -> Arc<RwLock<HuffmanTree>> {
-    let root = Some(Arc::new(RwLock::new(HuffmanTree {
-        left: None,
-        right: None,
-        data: None,
-    })));
-
-    let mut t = Arc::clone(root.as_ref().unwrap());
-    let mut tt;
-    for (x, v) in table {
-        for i in 0..x.len() {
-            {
-                tt = Arc::clone(&t);
-                let mut lt = tt.write().unwrap(); //locked tree
-                if 0 == x[i] {
-                    match lt.left {
-                        None => {
-                            lt.left = Some(Arc::new(RwLock::new(HuffmanTree {
-                                left: None,
-                                right: None,
-                                data: None,
-                            })));
-                        }
-                        _ => {}
-                    };
-                    t = Arc::clone(lt.left.as_ref().unwrap());
-                } else {
-                    match lt.right {
-                        None => {
-                            lt.right = Some(Arc::new(RwLock::new(HuffmanTree {
-                                left: None,
-                                right: None,
-                                data: None,
-                            })));
-                        }
-                        _ => {}
-                    }
-                    t = Arc::clone(lt.right.as_ref().unwrap());
-                }
-            }
-        }
-
-        t.write().unwrap().data = Some(v);
-        t = Arc::clone(root.as_ref().unwrap());
+///批量解码
+pub fn decode_batch(encoded: &[Encoded], table: &DecodeTable) -> Result<Vec<u8>, ()> {
+    let tree = Arc::new(gen_tree(table));
+    let mut res = vec![];
+    for part in encoded {
+        res.append(&mut decode(part, Arc::clone(&tree))?);
     }
 
-    root.unwrap()
+    Ok(res)
 }
 
-///首先解码全体数据，之后再将末尾pad_len的数据弹出
+///解码
 ///- #: 若在末尾pad_len位数据之前出现解码错误，返回Err(())，否则返回Ok(Vec<u8>)
 ///- @encoded[in]: encoded data and meta
 ///- @tree[in]: the huffman tree which data has been encoded by
-pub fn decode(encoded: &Encoded, tree: Arc<RwLock<HuffmanTree>>) -> Result<Vec<u8>, ()> {
+pub fn decode(encoded: &Encoded, tree: Arc<HuffmanTree>) -> Result<Vec<u8>, ()> {
     let mut res = vec![];
 
     if 0 < encoded.data.len() {
@@ -233,13 +239,13 @@ pub fn decode(encoded: &Encoded, tree: Arc<RwLock<HuffmanTree>>) -> Result<Vec<u
         let mut bit_idx = 0usize;
         loop {
             if check_bit(encoded.data[byte_idx], bit_idx) {
-                if let Some(node) = Arc::clone(&t).read().unwrap().right.as_ref() {
+                if let Some(node) = t.right.as_ref() {
                     t = Arc::clone(node);
                 } else {
                     return Err(());
                 }
             } else {
-                if let Some(node) = Arc::clone(&t).read().unwrap().left.as_ref() {
+                if let Some(node) = t.left.as_ref() {
                     t = Arc::clone(node);
                 } else {
                     return Err(());
@@ -247,7 +253,7 @@ pub fn decode(encoded: &Encoded, tree: Arc<RwLock<HuffmanTree>>) -> Result<Vec<u
             }
 
             //no data will exists on root&&non-leaf nodes
-            if let Some(v) = Arc::clone(&t).read().unwrap().data {
+            if let Some(v) = t.data {
                 res.push(v);
                 t = Arc::clone(&tree);
             }
@@ -277,7 +283,7 @@ fn check_bit(data: u8, n: usize) -> bool {
     }
 }
 
-//It is cheaper to return a u8 than use a pointer
+//cheaper to return a u8 than use a pointer ?
 #[inline]
 fn set_bit(data: u8, n: usize) -> u8 {
     data | BIT_SET[n]
@@ -286,14 +292,12 @@ fn set_bit(data: u8, n: usize) -> u8 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    //use rayon::prelude::*;
 
     fn worker(base: &[u8], source: &[u8]) -> Vec<u8> {
-        let (entb, detb) = gen_table(&base);
-        let tree = restore_tree(detb);
-        let encoded = encode(&source, &entb);
+        let (entb, detb) = gen_table(base);
+        let encoded = encode_batch(source, &entb);
 
-        decode(&encoded, tree).unwrap()
+        decode_batch(&encoded, &detb).unwrap()
     }
 
     #[test]
@@ -305,15 +309,12 @@ mod tests {
             0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 2u8, 2u8, 2u8, 0u8,
             0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8,
         ];
-        let source = [99u8, 1u8];
-        assert_eq!(source[..], worker(&base, &source)[..]);
+        let source = vec![99u8, 1u8];
+        assert_eq!(source, worker(&base, &source));
 
         let base = r"000000000000000000000000000a01201234012345678956789345678000000000
             ;lkjf;中国lhgqk;z`3`3@#$&^%&*^(*)_*)lqjpogjqpojr[ qpk['gkvlosdnh[2 lll1271>";
-        let source = base;
-        assert_eq!(
-            *source.as_bytes(),
-            worker(base.as_bytes(), source.as_bytes())[..]
-        );
+        let source = base.as_bytes().to_owned();
+        assert_eq!(source, worker(base.as_bytes(), &source));
     }
 }
