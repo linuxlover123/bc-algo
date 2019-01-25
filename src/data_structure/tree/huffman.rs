@@ -77,6 +77,7 @@ fn traversal(tree: Arc<HuffmanTree>, route: &mut Vec<u8>, entb_orig: &mut Vec<(V
 
 ///gen the HuffmanTree from a decode-table
 ///- @table[in]: code-table for decompression
+#[allow(clippy::ptr_arg)]
 pub fn gen_tree(table: &DecodeTable) -> HuffmanTree {
     assert!(2 < table.len());
     let mut root = HuffmanTree {
@@ -151,6 +152,7 @@ pub fn gen_table(data: &[u8]) -> (EncodeTable, DecodeTable) {
 ///并行编码函数，大于1MB的数据分片
 ///- @data[in]: those to be encoded
 ///- @table[in]: code-table for compression
+#[allow(clippy::ptr_arg)]
 pub fn encode_batch(data: &[u8], table: &EncodeTable) -> Vec<Encoded> {
     let data = Arc::new(data);
     let table = Arc::new(table);
@@ -183,6 +185,7 @@ pub fn encode_batch(data: &[u8], table: &EncodeTable) -> Vec<Encoded> {
 ///基本的编码函数，数据不分片
 ///- @data[in]: those to be encoded
 ///- @table[in]: code-table for compression
+#[allow(clippy::ptr_arg)]
 pub fn encode(source: Source, table: Arc<&EncodeTable>) -> Encoded {
     //计算编码结果所需空间，超过usize最大值会**panic**
     let data = &source.data[source.section[0]..source.section[1]];
@@ -222,6 +225,7 @@ pub fn encode(source: Source, table: Arc<&EncodeTable>) -> Encoded {
 }
 
 ///批量解码
+#[allow(clippy::ptr_arg)]
 pub fn decode_batch(encoded: &[Encoded], table: &DecodeTable) -> Result<Vec<u8>, ()> {
     let tree = Arc::new(gen_tree(table));
     let mut res = vec![];
