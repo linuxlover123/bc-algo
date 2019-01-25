@@ -18,9 +18,10 @@ use std::sync::RwLock;
 type SizType = u64;
 
 /// 链结构。
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct TwoWayLinkedList<T: Clone>(Arc<RwLock<List<T>>>);
 
+#[derive(Default)]
 struct List<T: Clone> {
     len: SizType,
     head: Arc<RwLock<Option<Node<T>>>>,
@@ -59,12 +60,8 @@ impl<T: Clone> TwoWayLinkedList<T> {
 
         if 0 == me.len {
             me.tail = Arc::clone(&new);
-        } else {
-            me.head
-                .write()
-                .unwrap()
-                .as_mut()
-                .map(|h| h.prev = Arc::clone(&new));
+        } else if let Some(h) = me.head.write().unwrap().as_mut() {
+            h.prev = Arc::clone(&new);
         }
 
         me.head = new;
@@ -83,12 +80,8 @@ impl<T: Clone> TwoWayLinkedList<T> {
 
         if 0 == me.len {
             me.head = Arc::clone(&new);
-        } else {
-            me.tail
-                .write()
-                .unwrap()
-                .as_mut()
-                .map(|t| t.back = Arc::clone(&new));
+        } else if let Some(t) = me.tail.write().unwrap().as_mut() {
+            t.back = Arc::clone(&new);
         }
 
         me.tail = new;
@@ -111,9 +104,9 @@ impl<T: Clone> TwoWayLinkedList<T> {
             } else {
                 let keep = Arc::clone(&me.head.read().unwrap().as_ref().unwrap().back);
                 me.head = keep;
-                me.head.write().unwrap().as_mut().map(|h| {
+                if let Some(h) = me.head.write().unwrap().as_mut() {
                     h.prev = Arc::clone(&me.none);
-                });
+                }
             }
 
             me.len -= 1;
@@ -138,9 +131,9 @@ impl<T: Clone> TwoWayLinkedList<T> {
             } else {
                 let keep = Arc::clone(&me.tail.read().unwrap().as_ref().unwrap().prev);
                 me.tail = keep;
-                me.tail.write().unwrap().as_mut().map(|t| {
+                if let Some(t) = me.tail.write().unwrap().as_mut() {
                     t.back = Arc::clone(&me.none);
-                });
+                }
             }
 
             me.len -= 1;
@@ -152,6 +145,10 @@ impl<T: Clone> TwoWayLinkedList<T> {
     /// 返回链表中所有节点的个数。
     pub fn len(&self) -> SizType {
         self.0.read().unwrap().len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        0 == self.len()
     }
 }
 

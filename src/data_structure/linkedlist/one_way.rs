@@ -15,6 +15,7 @@ use std::{fmt::Display, rc::Rc};
 type SizType = u64;
 
 /// 链结构。
+#[derive(Default)]
 pub struct OneWayLinkedList<T: Clone + Display> {
     len: SizType,
     head: Option<Rc<Node<T>>>,
@@ -54,10 +55,8 @@ impl<T: Clone + Display> OneWayLinkedList<T> {
 
             if 1 == self.len {
                 self.head = None;
-            } else {
-                self.head.as_mut().map(|h| {
-                    *h = Rc::clone(h.back.as_ref().unwrap());
-                });
+            } else if let Some(h) = self.head.as_mut() {
+                *h = Rc::clone(h.back.as_ref().unwrap());
             }
 
             self.len -= 1;
@@ -68,6 +67,10 @@ impl<T: Clone + Display> OneWayLinkedList<T> {
     /// 返回链表中所有节点的个数。
     pub fn len(&self) -> SizType {
         self.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        0 == self.len
     }
 
     /// 按 **从新到旧** 的顺序依次打印每个节点的值。
@@ -83,7 +86,7 @@ impl<T: Clone + Display> OneWayLinkedList<T> {
             res.push_str(&format!("{}==>", d));
             ptr = b.as_ref();
         }
-        res.push_str(&format!("Nil"));
+        res.push_str("Nil");
 
         res
     }

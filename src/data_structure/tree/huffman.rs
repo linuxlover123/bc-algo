@@ -18,7 +18,14 @@ const MB: usize = 1024 * 1024;
 
 //预置bit集合，优化位运算的效率
 const BIT_SET: [u8; 8] = [
-    0b00000001, 0b00000010, 0b00000100, 0b00001000, 0b00010000, 0b00100000, 0b01000000, 0b10000000,
+    0b0000_0001,
+    0b0000_0010,
+    0b0000_0100,
+    0b0000_1000,
+    0b0001_0000,
+    0b0010_0000,
+    0b0100_0000,
+    0b1000_0000,
 ];
 
 ///以u8为对象进行编解码的抽象数据类型，适配所有的数据类型
@@ -87,11 +94,11 @@ pub fn gen_tree(table: &DecodeTable) -> HuffmanTree {
     };
 
     let mut prev_weight = table[0].1 + table[1].1;
-    for i in 2..table.len() {
+    for i in table.iter().skip(2) {
         let leaf = HuffmanTree {
             left: None,
             right: None,
-            data: Some(table[i].0),
+            data: Some(i.0),
         };
 
         let mut r = HuffmanTree {
@@ -100,7 +107,7 @@ pub fn gen_tree(table: &DecodeTable) -> HuffmanTree {
             data: None,
         };
 
-        if table[i].1 <= prev_weight {
+        if i.1 <= prev_weight {
             r.left = Some(Arc::new(leaf));
             r.right = Some(Arc::new(root));
         } else {
@@ -109,7 +116,7 @@ pub fn gen_tree(table: &DecodeTable) -> HuffmanTree {
         }
 
         root = r;
-        prev_weight += table[i].1;
+        prev_weight += i.1;
     }
 
     root
@@ -158,19 +165,18 @@ pub fn encode_batch(data: &[u8], table: &EncodeTable) -> Vec<Encoded> {
             i += MB;
         }
 
-        return d
-            .into_par_iter()
+        d.into_par_iter()
             .map(|part| encode(part, Arc::clone(&table)))
-            .collect::<Vec<Encoded>>();
+            .collect::<Vec<Encoded>>()
     } else {
         let end = data.len();
-        return vec![encode(
+        vec![encode(
             Source {
                 data,
                 section: [0, end],
             },
             table,
-        )];
+        )]
     }
 }
 
@@ -191,7 +197,7 @@ pub fn encode(source: Source, table: Arc<&EncodeTable>) -> Encoded {
     //执行编码
     let mut res = Encoded {
         data: Vec::with_capacity(len),
-        pad_len: pad_len,
+        pad_len,
     };
     for _ in 0..len {
         res.data.push(0u8);
@@ -237,29 +243,28 @@ pub fn decode_batch(encoded: &[Encoded], table: &DecodeTable) -> Result<Vec<u8>,
 pub fn decode(encoded: &Encoded, tree: Arc<HuffmanTree>) -> Result<Vec<u8>, ()> {
     let mut res = vec![];
 
-    if 0 < encoded.data.len() {
-        let mut t = Arc::clone(&tree);
+    if !encoded.data.is_empty() {
+        let mut t = &tree;
+        let mut tt;
         let mut byte_idx = 0usize;
         let mut bit_idx = 0usize;
         loop {
             if check_bit(encoded.data[byte_idx], bit_idx) {
-                if let Some(node) = t.right.as_ref() {
-                    t = Arc::clone(node);
-                } else {
-                    return Err(());
-                }
+                tt = t.right.as_ref();
             } else {
-                if let Some(node) = t.left.as_ref() {
-                    t = Arc::clone(node);
-                } else {
-                    return Err(());
-                }
+                tt = t.left.as_ref();
+            }
+
+            if let Some(node) = tt {
+                t = node;
+            } else {
+                return Err(());
             }
 
             //no data will exists on root&&non-leaf nodes
             if let Some(v) = t.data {
                 res.push(v);
-                t = Arc::clone(&tree);
+                t = &tree;
             }
 
             bit_idx += 1;
@@ -280,11 +285,7 @@ pub fn decode(encoded: &Encoded, tree: Arc<HuffmanTree>) -> Result<Vec<u8>, ()> 
 //- #: 若第n位bit为1，返回true，否则返回false
 #[inline]
 fn check_bit(data: u8, n: usize) -> bool {
-    if 0 < data & BIT_SET[n] {
-        true
-    } else {
-        false
-    }
+    0 < data & BIT_SET[n]
 }
 
 //cheaper to return a u8 than use a pointer ?
