@@ -297,6 +297,7 @@ fn set_bit(data: u8, n: usize) -> u8 {
 mod tests {
     use super::*;
     use rand::random;
+    //use std::time;
 
     fn worker(base: &[u8], source: &[u8]) -> Vec<u8> {
         let (entb, detb) = gen_table(base);
@@ -307,10 +308,9 @@ mod tests {
 
     #[test]
     fn huffman() {
-        let base = (0..100_0000).map(|_| random::<u8>()).collect::<Vec<u8>>();
-
-        let source = (0..MB * 20).map(|_| random::<u8>()).collect::<Vec<u8>>();
-        assert_eq!(source, worker(&base, &source));
+        let base = (0..MB * 10).map(|_| random::<u8>()).collect::<Vec<u8>>();
+        let source = &base;
+        assert_eq!(source, &worker(&base, &source));
 
         for _i in 0..100 {
             let source = (0..100 + random::<usize>() % 99)
