@@ -193,9 +193,9 @@ mod test {
             bf.set(&a.to_le_bytes());
         }
 
+        dbg!(bf.false_positive_cnt());
         for i in bf.iter() {
             assert_eq!(N, i.item_cnt);
-            dbg!(bf.false_positive_cnt());
         }
 
         bf.clear();
