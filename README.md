@@ -18,8 +18,8 @@ cargo doc --open
 
 #### 布隆过滤器
 > Bloom Filter
+> - [x] bloom filter
 > - [x] partial bloom filter
-> - [x] counting bloom filter
 
 #### 链表
 > Linked List
