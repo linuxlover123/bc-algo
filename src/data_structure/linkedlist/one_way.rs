@@ -118,6 +118,7 @@ mod tests {
         for x in 0..=9 {
             list.add(x);
         }
-        println!("{}", list.stringify());
+
+        //println!("{}", list.stringify());
     }
 }

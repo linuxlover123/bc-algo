@@ -142,7 +142,6 @@ mod test {
         }
 
         assert_eq!(N, bf.item_cnt);
-        dbg!(bf.false_positive_cnt());
 
         bf.clear();
 

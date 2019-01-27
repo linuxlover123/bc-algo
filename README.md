@@ -28,16 +28,16 @@ cargo doc --open
 
 #### 树
 > Tree
-> - [x] huffman tree
-> - [ ] merkle tree
-> - [ ] sorted merlke tree
+> - [x] huffman tree(include a complete huffman-serde impl)
+> - [x] merlke tree(v1, classic-tree style)
+> - [x] merlke tree(v2, vector-layer style)
 > - [ ] trie
 > - [ ] patricia trie
 > - [ ] MPT
-> - [ ] AVL tree
-> - [ ] red black tree
 > - [ ] B tree
 > - [ ] B+ tree
+> - [ ] AVL tree
+> - [ ] red black tree
 
 #### 图
 > Graph
@@ -46,10 +46,6 @@ cargo doc --open
 > - [ ] base graph
 > - [ ] base net
 > - [ ] complex net
-
-#### 序列化与反序列化
-> Serialize and Deserialize
-> - [ ] ethereum RLP
 
 #### 共识算法
 > Consensus Algorithms
@@ -62,6 +58,10 @@ cargo doc --open
 > - [ ] kademlia
 > - [ ] S/kademlia
 > - [ ] coral
+
+#### [反]序列化
+> Serialize and Deserialize
+> - [ ] ethereum RLP
 
 #### 应用数学知识优化算法实现
 > Optimize algorithm using mathematical theorems

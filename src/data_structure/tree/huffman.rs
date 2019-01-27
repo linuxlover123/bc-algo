@@ -313,7 +313,7 @@ mod tests {
 
     #[test]
     fn huffman() {
-        let base = (0..MB * 10).map(|_| random::<u8>()).collect::<Vec<u8>>();
+        let base = (0..MB * 2).map(|_| random::<u8>()).collect::<Vec<u8>>();
         let source = &base;
         assert_eq!(source, &worker(&base, &source));
 
