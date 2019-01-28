@@ -74,7 +74,7 @@ impl Merkle {
             i = 0;
             while i < res[toplayer_idx].len() {
                 h = res[toplayer_idx][i].clone();
-                h.append(&mut (res[toplayer_idx][i + 1].clone()));
+                h.extend(res[toplayer_idx][i + 1].iter());
                 next_layer.push(hash(&h));
                 i += 2;
             }
@@ -146,7 +146,7 @@ impl Merkle {
                         h.append(&mut prev.hash);
                         prev.hash = hasher(&h);
                     } else {
-                        prev.hash.append(&mut last.hash.clone());
+                        prev.hash.extend(last.hash.iter());
                         prev.hash = hasher(&prev.hash);
                     }
                     prev

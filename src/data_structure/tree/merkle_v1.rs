@@ -51,15 +51,13 @@ impl Merkle {
         }
 
         let mut res = Vec::with_capacity(todo.len() / 2);
-        let mut res_i;
         let mut hashsig;
-        let mut i = 0;
-        while i < todo.len() {
-            hashsig = todo[i].borrow().hash.clone();
-            hashsig.append(&mut todo[i + 1].borrow().hash.clone());
+        let mut todo = todo.chunks(2);
+        while let Some(pair) = todo.next() {
+            hashsig = pair[0].borrow().hash.clone();
+            hashsig.extend(pair[1].borrow().hash.iter());
             hashsig = hash(&hashsig);
 
-            res_i = i / 2;
             res.push(Rc::new(RefCell::new(MerkleTree {
                 hash: hashsig,
                 parent: None,
@@ -67,14 +65,11 @@ impl Merkle {
                 brother_right: None,
             })));
 
-            todo[i].borrow_mut().parent = Some(Rc::clone(&res[res_i]));
-            todo[i + 1].borrow_mut().parent = Some(Rc::clone(&res[res_i]));
+            pair[0].borrow_mut().parent = Some(Rc::clone(res.last().unwrap()));
+            pair[1].borrow_mut().parent = Some(Rc::clone(res.last().unwrap()));
 
-            //`i`一定是偶数，不需要判断
-            todo[i].borrow_mut().brother_right = Some(Rc::clone(&todo[i + 1]));
-            todo[i + 1].borrow_mut().brother_left = Some(Rc::downgrade(&Rc::clone(&todo[i])));
-
-            i += 2;
+            pair[0].borrow_mut().brother_right = Some(Rc::clone(&pair[1]));
+            pair[1].borrow_mut().brother_left = Some(Rc::downgrade(&Rc::clone(&pair[0])));
         }
 
         Self::gen(res)
@@ -187,7 +182,7 @@ impl Merkle {
                         h.append(&mut prev.hash);
                         prev.hash = hasher(&h);
                     } else {
-                        prev.hash.append(&mut last.hash.clone());
+                        prev.hash.extend(last.hash.iter());
                         prev.hash = hasher(&prev.hash);
                     }
                     prev
