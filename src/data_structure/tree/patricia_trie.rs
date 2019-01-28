@@ -1,7 +1,7 @@
-//! ## Trie
+//! ## Patricia Trie
 //!
 //! #### 算法说明
-//! - 前缀搜索树。
+//! - 压缩前缀搜索树。
 //!
 //! #### 应用场景
 //! - 数据检索，其结果具有绝对唯一性。
@@ -10,6 +10,7 @@
 //! - <font color=Red>×</font> 多线程安全
 //! - <font color=Green>√</font> 无 unsafe 代码
 
+//TODO
 use std::ops::{Deref, DerefMut};
 
 pub trait TrieKey: Clone + Eq + Ord + PartialEq + PartialOrd {}
@@ -19,7 +20,7 @@ pub struct Trie<K: TrieKey, V>(Vec<Node<K, V>>);
 
 #[derive(Default)]
 pub struct Node<K: TrieKey, V> {
-    key: K,
+    key: Vec<K>,
     value: Option<V>,
     children: Vec<Node<K, V>>,
 }
