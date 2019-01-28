@@ -52,8 +52,8 @@ impl Merkle {
 
         let mut res = Vec::with_capacity(todo.len() / 2);
         let mut hashsig;
-        let mut todo = todo.chunks(2);
-        while let Some(pair) = todo.next() {
+        let todo = todo.chunks(2);
+        for pair in todo {
             hashsig = pair[0].borrow().hash.clone();
             hashsig.extend(pair[1].borrow().hash.iter());
             hashsig = hash(&hashsig);

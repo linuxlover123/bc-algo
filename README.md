@@ -31,7 +31,7 @@ cargo doc --open
 > - [x] huffman tree(include a complete huffman-serde impl)
 > - [x] merlke tree(v1, classic-tree style)
 > - [x] merlke tree(v2, vector-layer style)
-> - [ ] trie
+> - [x] trie
 > - [ ] patricia trie
 > - [ ] MPT
 > - [ ] B tree
