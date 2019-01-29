@@ -63,7 +63,7 @@ impl<K: TrieKey, V: Clone> Trie<K, V> {
 
                             (*children[i]).children.push(keep);
                             (*children[i]).children.push(Box::into_raw(Box::new(Node {
-                                key: key[idx_key..].to_vec(),
+                                key: key[idx_key + 1 + j..].to_vec(),
                                 value: Some(value),
                                 children: Vec::with_capacity(0),
                             })));
@@ -86,12 +86,12 @@ impl<K: TrieKey, V: Clone> Trie<K, V> {
                         } else if idx_key + (*children[i]).key.len() > key.len() {
                             let keep = children[i];
                             children[i] = Box::into_raw(Box::new(Node {
-                                key: (*keep).key[..key.len() - idx_key].to_vec(),
+                                key: key[idx_key..key.len()].to_vec(),
                                 value: Some(value),
                                 children: Vec::with_capacity(1),
                             }));
 
-                            (*keep).key.drain(..key.len() - idx_key);
+                            (*keep).key.drain(..(key.len() - idx_key - 1));
                             (*keep).key.shrink_to_fit();
                             (*children[i]).children.push(keep);
 
@@ -149,7 +149,11 @@ impl<K: TrieKey, V: Clone> Trie<K, V> {
                         //key[idx_key..]包含在children[i].key中
                         //证明查找成功
                         } else if idx_key + (*children[i]).key.len() >= key.len() {
-                            return Box::new(Some(children[i]));
+                            if (*children[i]).value.is_none() {
+                                return Box::new(None);
+                            } else {
+                                return Box::new(Some(children[i]));
+                            }
                         } else {
                             //children[i].key完全包含在key[idx_key..]之中，进入下一层继续查找
                             idx_key += (*children[i]).key.len();
@@ -258,21 +262,28 @@ mod test {
 
     #[test]
     fn trie() {
-        let mut sample = vec![1u128, 0u128];
+        let mut sample = vec![];
         let mut trie = Trie::new();
 
-        (0..13).for_each(|_| sample.push(random::<u128>()));
-        for v in sample.iter() {
+        (0..1117).for_each(|_| sample.push(random::<u128>()));
+        for v in sample.iter().cloned() {
             trie.insert(&v.to_be_bytes(), v).unwrap();
         }
 
         assert!(0 < trie.len());
 
-        for v in sample.iter() {
+        for v in sample.iter().cloned() {
             assert_eq!(v, trie.query(&v.to_be_bytes()).unwrap());
         }
 
         assert!(trie.remove(&sample[0].to_be_bytes()).is_ok());
         assert!(trie.query(&sample[0].to_be_bytes()).is_none());
+
+        assert!(trie.replace(&sample[0].to_be_bytes(), 999u128).is_err());
+        assert_eq!(
+            Some(sample[1]),
+            trie.replace(&sample[1].to_be_bytes(), 999u128).unwrap()
+        );
+        assert_eq!(999u128, trie.query(&sample[1].to_be_bytes()).unwrap());
     }
 }
