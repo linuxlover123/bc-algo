@@ -128,16 +128,6 @@ impl<K: TrieKey, V> Trie<K, V> {
     }
 }
 
-impl<K: TrieKey, V> Node<K, V> {
-    fn new(key: K, value: Option<V>) -> Node<K, V> {
-        Node {
-            key,
-            value,
-            children: Vec::with_capacity(0),
-        }
-    }
-}
-
 impl<K: TrieKey, V> Deref for Trie<K, V> {
     type Target = Vec<Node<K, V>>;
     fn deref(&self) -> &Self::Target {
