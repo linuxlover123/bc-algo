@@ -15,5 +15,6 @@ pub mod huffman;
 pub mod merkle_v1;
 pub mod merkle_v2;
 pub mod mpt;
+pub mod patricia_trie;
 pub mod red_black;
 pub mod trie;

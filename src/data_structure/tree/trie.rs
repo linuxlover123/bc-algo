@@ -80,11 +80,29 @@ impl<K: TrieKey, V> Trie<K, V> {
         Ok(())
     }
 
-    fn query(&self, key: &[K]) -> &Option<V> {
-        //key 不能为空
-        if key.is_empty() {
-            return &None;
+    fn remove(&mut self, key: &[K]) -> Result<(), ()> {
+        let mut children = &mut self.0;
+        for i in 0..key.len() {
+            match children.binary_search_by(|item| item.key.cmp(&key[i])) {
+                Ok(j) => {
+                    if 1 == children.len() {
+                        children.clear();
+                        return Ok(());
+                    }
+                    children = &mut children[j].children;
+                }
+                Err(_) => {
+                    //不存在则返回错误
+                    return Err(());
+                }
+            };
         }
+
+        //只有key为空时才会到达此处
+        Err(())
+    }
+
+    fn query(&self, key: &[K]) -> &Option<V> {
         let mut children = &self.0;
         let mut children_prev = &self.0;
         let mut idx_children = 0;
@@ -102,16 +120,10 @@ impl<K: TrieKey, V> Trie<K, V> {
             };
         }
 
-        &children_prev[idx_children].value
-    }
-}
-
-impl<K: TrieKey, V> Node<K, V> {
-    fn new(key: K, value: Option<V>) -> Node<K, V> {
-        Node {
-            key,
-            value,
-            children: Vec::with_capacity(0),
+        if key.is_empty() {
+            &None
+        } else {
+            &children_prev[idx_children].value
         }
     }
 }
@@ -149,6 +161,7 @@ mod test {
             assert_eq!(i, trie.query(&i.to_le_bytes()).unwrap());
         }
 
-        assert!(trie.query(&100u128.to_le_bytes()).is_none());
+        assert!(trie.remove(&0u128.to_le_bytes()).is_ok());
+        assert!(trie.query(&0u128.to_le_bytes()).is_none());
     }
 }
