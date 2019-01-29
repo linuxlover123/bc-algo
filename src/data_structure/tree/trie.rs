@@ -103,10 +103,6 @@ impl<K: TrieKey, V> Trie<K, V> {
     }
 
     fn query(&self, key: &[K]) -> &Option<V> {
-        //key 不能为空
-        if key.is_empty() {
-            return &None;
-        }
         let mut children = &self.0;
         let mut children_prev = &self.0;
         let mut idx_children = 0;
@@ -124,7 +120,11 @@ impl<K: TrieKey, V> Trie<K, V> {
             };
         }
 
-        &children_prev[idx_children].value
+        if key.is_empty() {
+            &None
+        } else {
+            &children_prev[idx_children].value
+        }
     }
 }
 

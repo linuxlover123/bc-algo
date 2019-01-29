@@ -31,31 +31,51 @@ impl<K: TrieKey, V> Trie<K, V> {
     }
 
     fn insert(&mut self, key: &[K], value: V) -> Result<(), ()> {
-        //key 不能为空
-        if key.is_empty() {
-            return Err(());
-        }
         let mut children = &mut self.0;
         let mut idx_children = 0;
         let mut idx_key = 0;
 
         //在已有路径上查找
-        for i in 0..key.len() {
-            match children.binary_search_by(|item| item.key.cmp(&key[i])) {
-                Ok(j) => {
-                    children = &mut children[j].children;
-                    idx_key = i;
+        while idx_key < key.len() {
+            match children.binary_search_by(|item| item.key[0].cmp(&key[idx_key])) {
+                Ok(i) => {
+                    if let Some(j) = key
+                        .iter()
+                        .zip(children.key.iter())
+                        .skip(1)
+                        .position(|(k1, k2)| k1 != k2)
+                    {
+                        //key与children[i].key之间存在差异项
+                        idx_key += j;
+                        let new = Node {
+                            key: children[i].key[(1 + j)..].clone(),
+                            value: None,
+                            children: vec![],
+                        };
+                        children[i].key.truncate(1 + j);
+                    } else {
+                        //key完全包含在children[i].key之中
+
+                    }
+
+                    children = &mut children[i].children;
                 }
-                Err(j) => {
-                    idx_children = j;
-                    idx_key = i;
+                Err(i) => {
+                    idx_children = i;
                     break;
                 }
             };
+
+            idx_key += 1;
         }
 
         //扩展新路径至倒数第二个位置
-        for k in key[idx_key..].iter().take(key.len() - idx_key - 1).cloned() {
+        for k in key
+            .iter()
+            .skip(idx_key - 1)
+            .take(key.len() - idx_key - 1)
+            .cloned()
+        {
             children.insert(
                 idx_children,
                 Node {
@@ -68,17 +88,21 @@ impl<K: TrieKey, V> Trie<K, V> {
             idx_children = 0;
         }
 
-        //末端插入数值
-        children.insert(
-            idx_children,
-            Node {
-                key: key[key.len() - 1].clone(),
-                value: Some(value),
-                children: Vec::with_capacity(0),
-            },
-        );
+        if key.is_empty() {
+            Err(())
+        } else {
+            //末端插入数值
+            children.insert(
+                idx_children,
+                Node {
+                    key: key[key.len() - 1].clone(),
+                    value: Some(value),
+                    children: Vec::with_capacity(0),
+                },
+            );
 
-        Ok(())
+            Ok(())
+        }
     }
 
     fn remove(&mut self, key: &[K]) -> Result<(), ()> {
@@ -104,10 +128,6 @@ impl<K: TrieKey, V> Trie<K, V> {
     }
 
     fn query(&self, key: &[K]) -> &Option<V> {
-        //key 不能为空
-        if key.is_empty() {
-            return &None;
-        }
         let mut children = &self.0;
         let mut children_prev = &self.0;
         let mut idx_children = 0;
@@ -125,7 +145,11 @@ impl<K: TrieKey, V> Trie<K, V> {
             };
         }
 
-        &children_prev[idx_children].value
+        if key.is_empty() {
+            &None
+        } else {
+            &children_prev[idx_children].value
+        }
     }
 }
 
