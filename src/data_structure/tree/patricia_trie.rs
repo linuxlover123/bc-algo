@@ -45,6 +45,7 @@ impl<K: TrieKey, V: Clone> Trie<K, V> {
                     Ok(i) => {
                         if let Some(j) = key
                             .iter()
+                            .skip(idx_key)
                             .zip((*children[i]).key.iter())
                             .skip(1)
                             .position(|(k1, k2)| k1 != k2)
@@ -137,6 +138,7 @@ impl<K: TrieKey, V: Clone> Trie<K, V> {
                     Ok(i) => {
                         if key
                             .iter()
+                            .skip(idx_key)
                             .zip((*children[i]).key.iter())
                             .skip(1)
                             .any(|(k1, k2)| k1 != k2)
@@ -196,6 +198,7 @@ impl<K: TrieKey, V: Clone> Trie<K, V> {
                     Ok(i) => {
                         if key
                             .iter()
+                            .skip(idx_key)
                             .zip((*children[i]).key.iter())
                             .skip(1)
                             .any(|(k1, k2)| k1 != k2)
@@ -255,21 +258,21 @@ mod test {
 
     #[test]
     fn trie() {
-        let mut sample = vec![];
+        let mut sample = vec![1u128, 0u128];
         let mut trie = Trie::new();
 
-        (0..1000).for_each(|_| sample.push(random::<u128>()));
+        (0..13).for_each(|_| sample.push(random::<u128>()));
         for v in sample.iter() {
-            trie.insert(&v.to_le_bytes(), v).unwrap();
+            trie.insert(&v.to_be_bytes(), v).unwrap();
         }
 
         assert!(0 < trie.len());
 
         for v in sample.iter() {
-            assert_eq!(v, trie.query(&v.to_le_bytes()).unwrap());
+            assert_eq!(v, trie.query(&v.to_be_bytes()).unwrap());
         }
 
-        assert!(trie.remove(&sample[0].to_le_bytes()).is_ok());
-        assert!(trie.query(&sample[0].to_le_bytes()).is_none());
+        assert!(trie.remove(&sample[0].to_be_bytes()).is_ok());
+        assert!(trie.query(&sample[0].to_be_bytes()).is_none());
     }
 }
