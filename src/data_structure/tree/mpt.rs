@@ -14,6 +14,36 @@
 
 use std::rc::Rc;
 
+#[macro_use]
+mod macro_tools {
+    macro_rules! key {
+        ($node: expr) => {
+            $node.key.base[$node.key.section[0]..=$node.key.section[1]]
+        };
+    }
+
+    macro_rules! gen_key {
+        ($base: expr, $start: expr, $end: expr) => {
+            KeyIdx {
+                base: Rc::clone(&$base),
+                section: [$start, $end],
+            }
+        };
+    }
+
+    macro_rules! gen_key_from {
+        ($key: expr, $offset_start: expr, $offset_end: expr) => {
+            KeyIdx {
+                base: Rc::clone(&$key.base),
+                section: [
+                    $key.section[0] + $offset_start,
+                    $key.section[1] + $offset_end,
+                ],
+            }
+        };
+    }
+}
+
 pub trait TrieKey: Clone + Eq + Ord + PartialEq + PartialOrd {}
 
 #[derive(Default)]
@@ -42,31 +72,6 @@ where
 {
     base: Rc<Vec<K>>,
     section: [usize; 2], //前后均包含
-}
-
-macro_rules! key {
-    ($node: expr) => {
-        $node.key.base[$node.key.section[0]..=$node.key.section[1]]
-    };
-}
-macro_rules! gen_key {
-    ($base: expr, $start: expr, $end: expr) => {
-        KeyIdx {
-            base: Rc::clone(&$base),
-            section: [$start, $end],
-        }
-    };
-}
-macro_rules! gen_key_from {
-    ($key: expr, $offset_start: expr, $offset_end: expr) => {
-        KeyIdx {
-            base: Rc::clone(&$key.base),
-            section: [
-                $key.section[0] + $offset_start,
-                $key.section[1] + $offset_end,
-            ],
-        }
-    };
 }
 
 impl<K, V> Trie<K, V>
