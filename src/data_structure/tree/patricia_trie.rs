@@ -124,7 +124,7 @@ impl<K: TrieKey, V: Clone> Trie<K, V> {
         Ok(())
     }
 
-    fn inner_query(&self, key: &[K]) -> Box<Option<*mut Node<K, V>>> {
+    fn inner_query(&self, key: &[K]) -> Box<Option<*mut *mut Node<K, V>>> {
         if key.is_empty() {
             return Box::new(None);
         }
@@ -152,7 +152,7 @@ impl<K: TrieKey, V: Clone> Trie<K, V> {
                             if (*children[i]).value.is_none() {
                                 return Box::new(None);
                             } else {
-                                return Box::new(Some(children[i]));
+                                return Box::new(Some(Box::into_raw(Box::new(children[i]))));
                             }
                         } else {
                             //children[i].key完全包含在key[idx_key..]之中，进入下一层继续查找
@@ -172,15 +172,18 @@ impl<K: TrieKey, V: Clone> Trie<K, V> {
     }
 
     fn query(&self, key: &[K]) -> Option<V> {
-        unsafe { self.inner_query(key).and_then(|node| (*node).value.clone()) }
+        unsafe {
+            self.inner_query(key)
+                .and_then(|node| (**node).value.clone())
+        }
     }
 
     fn replace(&mut self, key: &[K], value: V) -> Result<Option<V>, ()> {
         if let Some(mut v) = *self.inner_query(key) {
             let old;
             unsafe {
-                old = (*v).value.clone();
-                (*v).value = Some(value);
+                old = (**v).value.clone();
+                (**v).value = Some(value);
             }
             Ok(old)
         } else {
@@ -189,53 +192,25 @@ impl<K: TrieKey, V: Clone> Trie<K, V> {
     }
 
     fn remove(&mut self, key: &[K]) -> Result<Option<V>, ()> {
-        if key.is_empty() {
-            return Err(());
-        }
-
-        let mut children = &mut self.0;
-        let mut idx_key = 0;
-
-        while idx_key < key.len() {
+        if let Some(mut v) = *self.inner_query(key) {
+            let old;
             unsafe {
-                match children.binary_search_by(|&item| (*item).key[0].cmp(&key[idx_key])) {
-                    Ok(i) => {
-                        if key
-                            .iter()
-                            .skip(idx_key)
-                            .zip((*children[i]).key.iter())
-                            .skip(1)
-                            .any(|(k1, k2)| k1 != k2)
-                        //key[idx_key..]与children[i].key之间存在差异项
-                        //则证明查找对象不存在，返回错误
-                        {
-                            return Err(());
-                        //key[idx_key..] == children[i].key
-                        //若1 == children.len()，则清除所在分支
-                        //否则只清除value
-                        } else if idx_key + (*children[i]).key.len() >= key.len() {
-                            let old = (*children[i]).value.clone();
-                            if idx_key + children.len() == key.len() && 1 == children.len() {
-                                children.clear();
-                            } else {
-                                (*children[i]).value = None;
-                            }
-                            return Ok(old);
-                        } else {
-                            //children[i].key完全包含在key[idx_key..]之中，进入下一层继续查找
-                            idx_key += (*children[i]).key.len();
-                            children = &mut (*children[i]).children;
-                        }
-                    }
-                    //查找失败，返回错误
-                    Err(_) => {
-                        return Err(());
-                    }
-                };
+                old = (**v).value.clone();
+                (**v).value = None;
+                //合并路径
+                if 1 == (**v).children.len() {
+                    let keep = (**v).children.pop().unwrap();
+                    (*keep).key = [&(**v).key, &(*keep).key]
+                        .iter()
+                        .flat_map(|&k| k.clone())
+                        .collect::<Vec<K>>();
+                    *v = keep;
+                }
             }
+            Ok(old)
+        } else {
+            Err(())
         }
-
-        panic!("BUG!")
     }
 }
 
@@ -276,10 +251,12 @@ mod test {
             assert_eq!(v, trie.query(&v.to_be_bytes()).unwrap());
         }
 
-        assert!(trie.remove(&sample[0].to_be_bytes()).is_ok());
-        assert!(trie.query(&sample[0].to_be_bytes()).is_none());
+        for v in sample[10..].iter().cloned() {
+            assert!(trie.remove(&v.to_be_bytes()).is_ok());
+            assert!(trie.query(&v.to_be_bytes()).is_none());
+        }
 
-        assert!(trie.replace(&sample[0].to_be_bytes(), 999u128).is_err());
+        assert!(trie.replace(&sample[10].to_be_bytes(), 999u128).is_err());
         assert_eq!(
             Some(sample[1]),
             trie.replace(&sample[1].to_be_bytes(), 999u128).unwrap()

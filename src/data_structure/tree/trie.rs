@@ -8,7 +8,7 @@
 //!
 //! #### 实现属性
 //! - <font color=Red>×</font> 多线程安全
-//! - <font color=Green>√</font> 无 unsafe 代码
+//! - <font color=Red>×</font> 无 unsafe 代码
 
 use std::ops::{Deref, DerefMut};
 
@@ -81,14 +81,19 @@ impl<K: TrieKey, V> Trie<K, V> {
     }
 
     fn remove(&mut self, key: &[K]) -> Result<(), ()> {
+        if key.is_empty() {
+            return Err(());
+        }
+
         let mut children = &mut self.0;
+        let mut children_prev = children as *mut Vec<Node<K, V>>;
+
+        let mut idx = 0;
         for i in 0..key.len() {
             match children.binary_search_by(|item| item.key.cmp(&key[i])) {
                 Ok(j) => {
-                    if 1 == children.len() {
-                        children.clear();
-                        return Ok(());
-                    }
+                    idx = j;
+                    children_prev = children as *mut Vec<Node<K, V>>;
                     children = &mut children[j].children;
                 }
                 Err(_) => {
@@ -98,11 +103,21 @@ impl<K: TrieKey, V> Trie<K, V> {
             };
         }
 
-        //只有key为空时才会到达此处
-        Err(())
+        //TODO: 递归向上回收无值(空白)路径
+        unsafe {
+            (*children_prev)[idx].value = None;
+            if (*children_prev)[idx].children.is_empty() {
+                (*children_prev).remove(idx);
+            }
+        }
+        Ok(())
     }
 
     fn query(&self, key: &[K]) -> &Option<V> {
+        if key.is_empty() {
+            return &None;
+        }
+
         let mut children = &self.0;
         let mut children_prev = &self.0;
         let mut idx_children = 0;
@@ -120,11 +135,7 @@ impl<K: TrieKey, V> Trie<K, V> {
             };
         }
 
-        if key.is_empty() {
-            &None
-        } else {
-            &children_prev[idx_children].value
-        }
+        &children_prev[idx_children].value
     }
 }
 
