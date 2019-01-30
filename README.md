@@ -63,9 +63,9 @@ cargo doc --open
 > - [ ] S/kademlia
 > - [ ] coral
 
-#### 应用数学知识优化算法实现
+#### 数学＋算法
 > Optimize algorithm using mathematical theorems
-> - [ ] 初、高中数学定理...
+> - [ ] 常用的数学定理
 > - [ ] 微积分
 > - [ ] 概率论与数理统计
 > - [ ] 线性代数与线性规划
