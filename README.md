@@ -16,15 +16,20 @@ cargo doc --open
 
 ## 完成进度
 
+#### [反]序列化
+> Serialize and Deserialize
+> - [ ] ethereum RLP
+
 #### 布隆过滤器
 > Bloom Filter
 > - [x] bloom filter
 > - [x] partial bloom filter
 
-#### 链表
+#### 链表、跳表
 > Linked List
 > - [x] one-way linked list
 > - [x] two-way linked list
+> - [ ] skip list
 
 #### 树
 > Tree
@@ -42,7 +47,6 @@ cargo doc --open
 #### 图
 > Graph
 > - [ ] DAG
-> - [ ] skip list
 > - [ ] base graph
 > - [ ] base net
 > - [ ] complex net
@@ -58,10 +62,6 @@ cargo doc --open
 > - [ ] kademlia
 > - [ ] S/kademlia
 > - [ ] coral
-
-#### [反]序列化
-> Serialize and Deserialize
-> - [ ] ethereum RLP
 
 #### 应用数学知识优化算法实现
 > Optimize algorithm using mathematical theorems
