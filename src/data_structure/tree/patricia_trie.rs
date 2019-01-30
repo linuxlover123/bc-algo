@@ -152,7 +152,9 @@ impl<K: TrieKey, V: Clone> Trie<K, V> {
                             if (*children[i]).value.is_none() {
                                 return Box::new(None);
                             } else {
-                                return Box::new(Some(Box::into_raw(Box::new(children[i]))));
+                                return Box::new(Some(
+                                    &children[i] as *const *mut Node<K, V> as *mut *mut Node<K, V>,
+                                ));
                             }
                         } else {
                             //children[i].key完全包含在key[idx_key..]之中，进入下一层继续查找

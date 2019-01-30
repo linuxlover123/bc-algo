@@ -1,4 +1,4 @@
-//! ## Sorted Merkle Tree
+//! ## Merkle Tree
 //!
 //! #### 算法说明
 //! - 使用多维Vec实现的哈希树。

@@ -33,7 +33,7 @@ cargo doc --open
 > - [x] merlke tree(v2, vector-layer style)
 > - [x] trie
 > - [x] patricia trie
-> - [ ] MPT
+> - [x] MPT
 > - [ ] B tree
 > - [ ] B+ tree
 > - [ ] AVL tree

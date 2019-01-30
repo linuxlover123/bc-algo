@@ -1,4 +1,4 @@
-//! ## Sorted Merkle Tree
+//! ## Merkle Tree
 //!
 //! #### 算法说明
 //! - 哈希树。
