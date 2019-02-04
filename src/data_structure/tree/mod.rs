@@ -12,9 +12,8 @@ pub mod avl;
 pub mod b;
 pub mod bplus;
 pub mod huffman;
-pub mod merkle_v1;
-pub mod merkle_v2;
+pub mod merkle;
 pub mod mpt;
-pub mod patricia_trie;
+//pub mod patricia_trie; //TODO memory leak!
 pub mod red_black;
 pub mod trie;

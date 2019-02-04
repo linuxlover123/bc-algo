@@ -16,56 +16,43 @@ cargo doc --open
 
 ## 完成进度
 
-#### [反]序列化
-> Serialize and Deserialize
-> - [ ] ethereum RLP
+#### Bloom Filter
+> - [x] [origin](src/data_structure/bloomfilter/origin.rs)
+> - [x] [partial](src/data_structure/bloomfilter/partial.rs)
 
-#### 布隆过滤器
-> Bloom Filter
-> - [x] bloom filter
-> - [x] partial bloom filter
+#### Linked List
+> - [x] [one-way](src/data_structure/linkedlist/one_way.rs)
+> - [x] [two-way](src/data_structure/linkedlist/two_way.rs)
 
-#### 链表、跳表
-> Linked List
-> - [x] one-way linked list
-> - [x] two-way linked list
-> - [ ] skip list
+#### Tree
+> - [x] [merlke tree](src/data_structure/tree/merkle.rs): [v1, classic-tree style], [v2, vector-layer style]
+> - [x] [trie](src/data_structure/tree/trie.rs)
+> - [x] [patricia trie](src/data_structure/tree/patricia_trie.rs): [v1, common use], [v2, append only style]
+> - [x] [MPT](src/data_structure/tree/mpt.rs)(merkle patricia trie)
+> - [ ] [skip list](src/data_structure/tree/skip_list.rs): [v1, 2-step], [v2, N-step]
+> - [ ] [MSL](src/data_structure/tree/msl.rs)(merkle skip list)
+> - [ ] B
+> - [ ] B+
+> - [ ] red-black tree
+> - [ ] AVL
+> - [x] [huffman tree](src/data_structure/tree/huffman.rs)(include a complete huffman-serde implement)
+> - [ ] [RLP](src/data_structure/tree/rlp.rs)(RLP [de]serialize algorithm used in ethereum)
 
-#### 树
-> Tree
-> - [x] huffman tree(include a complete huffman-serde impl)
-> - [x] merlke tree(v1, classic-tree style)
-> - [x] merlke tree(v2, vector-layer style)
-> - [x] trie
-> - [x] patricia trie
-> - [x] MPT
-> - [ ] B tree
-> - [ ] B+ tree
-> - [ ] AVL tree
-> - [ ] red black tree
-
-#### 图
-> Graph
+#### Graph
 > - [ ] DAG
-> - [ ] base graph
-> - [ ] base net
-> - [ ] complex net
 
-#### 共识算法
-> Consensus Algorithms
-> - [ ] bitcoin POW
-> - [ ] ethereum POW
-> - [ ] raft
-
-#### P2P 路由算法
-> P2P Routing Algorithms
+#### P2P Routing Algorithms
 > - [ ] kademlia
 > - [ ] S/kademlia
 > - [ ] coral
 
-#### 数学＋算法
-> Optimize algorithm using mathematical theorems
-> - [ ] 常用的数学定理
+#### Consensus Algorithms
+> - [ ] bitcoin POW
+> - [ ] ethereum POW
+> - [ ] raft
+
+#### Optimize algorithm using mathematical theorems
+> - [ ] 数学定理
 > - [ ] 微积分
 > - [ ] 概率论与数理统计
 > - [ ] 线性代数与线性规划

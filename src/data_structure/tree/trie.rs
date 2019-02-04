@@ -21,7 +21,7 @@ pub struct Trie<K: TrieKey, V>(Vec<Node<K, V>>);
 pub struct Node<K: TrieKey, V> {
     key: K,
     value: Option<V>,
-    nodes: Vec<Node<K, V>>,
+    children: Vec<Node<K, V>>,
 }
 
 impl<K: TrieKey, V> Trie<K, V> {
@@ -34,50 +34,44 @@ impl<K: TrieKey, V> Trie<K, V> {
         if key.is_empty() {
             return Err(());
         }
-        let mut nodes = &mut self.0;
-        let mut idx_nodes = 0;
-        let mut idx_key = 0;
+        let mut children = &mut self.0;
 
         //在已有路径上查找
         for i in 0..key.len() {
-            match nodes.binary_search_by(|item| item.key.cmp(&key[i])) {
+            match children.binary_search_by(|item| item.key.cmp(&key[i])) {
                 Ok(j) => {
-                    nodes = &mut nodes[j].nodes;
-                    idx_key = i;
+                    children = &mut children[j].children;
                 }
-                Err(j) => {
-                    idx_nodes = j;
-                    idx_key = i;
-                    break;
+                Err(mut j) => {
+                    //扩展新路径至倒数第二个位置
+                    for k in key[i..].iter().take(key.len() - i - 1).cloned() {
+                        children.insert(
+                            j,
+                            Node {
+                                key: k,
+                                value: None,
+                                children: Vec::with_capacity(1),
+                            },
+                        );
+                        children = &mut children[j].children;
+                        j = 0;
+                    }
+
+                    //末端插入数值
+                    children.insert(
+                        j,
+                        Node {
+                            key: key[key.len() - 1].clone(),
+                            value: Some(value),
+                            children: Vec::with_capacity(0),
+                        },
+                    );
+
+                    return Ok(());
                 }
             };
         }
-
-        //扩展新路径至倒数第二个位置
-        for k in key[idx_key..].iter().take(key.len() - idx_key - 1).cloned() {
-            nodes.insert(
-                idx_nodes,
-                Node {
-                    key: k,
-                    value: None,
-                    nodes: Vec::with_capacity(1),
-                },
-            );
-            nodes = &mut nodes[idx_nodes].nodes;
-            idx_nodes = 0;
-        }
-
-        //末端插入数值
-        nodes.insert(
-            idx_nodes,
-            Node {
-                key: key[key.len() - 1].clone(),
-                value: Some(value),
-                nodes: Vec::with_capacity(0),
-            },
-        );
-
-        Ok(())
+        unreachable!();
     }
 
     fn remove(&mut self, key: &[K]) -> Result<(), ()> {
@@ -85,16 +79,16 @@ impl<K: TrieKey, V> Trie<K, V> {
             return Err(());
         }
 
-        let mut nodes = &mut self.0;
-        let mut nodes_prev = nodes as *mut Vec<Node<K, V>>;
+        let mut children = &mut self.0;
+        let mut children_prev = children as *mut Vec<Node<K, V>>;
 
         let mut idx = 0;
         for i in 0..key.len() {
-            match nodes.binary_search_by(|item| item.key.cmp(&key[i])) {
+            match children.binary_search_by(|item| item.key.cmp(&key[i])) {
                 Ok(j) => {
                     idx = j;
-                    nodes_prev = nodes as *mut Vec<Node<K, V>>;
-                    nodes = &mut nodes[j].nodes;
+                    children_prev = children as *mut Vec<Node<K, V>>;
+                    children = &mut children[j].children;
                 }
                 Err(_) => {
                     //不存在则返回错误
@@ -105,9 +99,9 @@ impl<K: TrieKey, V> Trie<K, V> {
 
         //TODO: 递归向上回收无值(空白)路径
         unsafe {
-            (*nodes_prev)[idx].value = None;
-            if (*nodes_prev)[idx].nodes.is_empty() {
-                (*nodes_prev).remove(idx);
+            (*children_prev)[idx].value = None;
+            if (*children_prev)[idx].children.is_empty() {
+                (*children_prev).remove(idx);
             }
         }
         Ok(())
@@ -118,16 +112,16 @@ impl<K: TrieKey, V> Trie<K, V> {
             return &None;
         }
 
-        let mut nodes = &self.0;
-        let mut nodes_prev = &self.0;
-        let mut idx_nodes = 0;
+        let mut children = &self.0;
+        let mut children_prev = &self.0;
+        let mut idx_children = 0;
 
         for i in 0..key.len() {
-            match nodes.binary_search_by(|item| item.key.cmp(&key[i])) {
+            match children.binary_search_by(|item| item.key.cmp(&key[i])) {
                 Ok(j) => {
-                    nodes_prev = nodes;
-                    nodes = &nodes[j].nodes;
-                    idx_nodes = j;
+                    children_prev = children;
+                    children = &children[j].children;
+                    idx_children = j;
                 }
                 Err(_) => {
                     return &None;
@@ -135,7 +129,7 @@ impl<K: TrieKey, V> Trie<K, V> {
             };
         }
 
-        &nodes_prev[idx_nodes].value
+        &children_prev[idx_children].value
     }
 }
 
