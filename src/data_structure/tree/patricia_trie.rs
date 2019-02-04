@@ -316,7 +316,7 @@ pub mod v2 {
             $node.key.base[$node.key.section[0]..=$node.key.section[1]]
         };
     }
-    
+
     macro_rules! gen_key {
         ($base: expr, $start: expr, $end: expr) => {
             KeyIdx {
@@ -325,7 +325,7 @@ pub mod v2 {
             }
         };
     }
-    
+
     macro_rules! gen_key_from {
         ($key: expr, $offset_start: expr, $offset_end: expr) => {
             KeyIdx {

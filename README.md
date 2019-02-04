@@ -17,20 +17,20 @@ cargo doc --open
 > - [x] [MPT](src/data_structure/tree/mpt.rs)(merkle patricia trie)
 
 # Develop In Process
+#### Tree
+> - [x] [patricia trie](src/draft_for_exercise/tree/patricia_trie.rs): [v1, common use], [v2, append only style]
+> - [ ] [skip list](src/data_structure/tree/skip_list.rs): [v1, 2-step], [v2, N-step]
+> - [ ] [MSL](src/data_structure/tree/msl.rs)(merkle skip list)
+
+#### Graph
+> - [ ] DAG
+
 #### Bloom Filter
 > - [x] [origin](src/data_structure/bloomfilter/origin.rs)
 > - [x] [partial](src/data_structure/bloomfilter/partial.rs)
 
-#### Tree
-> - [x] [merlke tree](src/data_structure/tree/merkle.rs): [v1, classic-tree style], [v2, vector-layer style]
-> - [ ] [skip list](src/data_structure/tree/skip_list.rs): [v1, 2-step], [v2, N-step]
-> - [ ] [MSL](src/data_structure/tree/msl.rs)(merkle skip list)
-
 #### Serde
 > - [ ] [RLP](src/data_structure/tree/rlp.rs)(RLP [de]serialize algorithm used in ethereum)
-
-#### Graph
-> - [ ] DAG
 
 #### P2P Routing Algorithms
 > - [ ] kademlia
@@ -48,9 +48,9 @@ cargo doc --open
 > - [x] [two-way](src/draft_for_exercise/linkedlist/two_way.rs)
 
 #### Tree
-> - [x] [huffman tree](src/draft_for_exercise/tree/huffman.rs)(include a complete huffman-serde implement)
 > - [x] [trie](src/draft_for_exercise/tree/trie.rs)
-> - [x] [patricia trie](src/draft_for_exercise/tree/patricia_trie.rs): [v1, common use], [v2, append only style]
+> - [x] [merlke tree](src/data_structure/tree/merkle.rs): [v1, classic-tree style], [v2, vector-layer style]
+> - [x] [huffman tree](src/draft_for_exercise/tree/huffman.rs)(include a complete huffman-serde implement)
 > - [ ] B
 > - [ ] B+
 > - [ ] red-black tree
