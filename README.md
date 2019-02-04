@@ -14,28 +14,21 @@
 cargo doc --open
 ```
 
-## 完成进度
+## Ready For Production
+#### Tree
+> - [x] [MPT](src/data_structure/tree/mpt.rs)(merkle patricia trie)
 
+## Development In Process
 #### Bloom Filter
 > - [x] [origin](src/data_structure/bloomfilter/origin.rs)
 > - [x] [partial](src/data_structure/bloomfilter/partial.rs)
 
-#### Linked List
-> - [x] [one-way](src/data_structure/linkedlist/one_way.rs)
-> - [x] [two-way](src/data_structure/linkedlist/two_way.rs)
-
 #### Tree
 > - [x] [merlke tree](src/data_structure/tree/merkle.rs): [v1, classic-tree style], [v2, vector-layer style]
-> - [x] [trie](src/data_structure/tree/trie.rs)
-> - [x] [patricia trie](src/data_structure/tree/patricia_trie.rs): [v1, common use], [v2, append only style]
-> - [x] [MPT](src/data_structure/tree/mpt.rs)(merkle patricia trie)
 > - [ ] [skip list](src/data_structure/tree/skip_list.rs): [v1, 2-step], [v2, N-step]
 > - [ ] [MSL](src/data_structure/tree/msl.rs)(merkle skip list)
-> - [ ] B
-> - [ ] B+
-> - [ ] red-black tree
-> - [ ] AVL
-> - [x] [huffman tree](src/data_structure/tree/huffman.rs)(include a complete huffman-serde implement)
+
+#### Serde
 > - [ ] [RLP](src/data_structure/tree/rlp.rs)(RLP [de]serialize algorithm used in ethereum)
 
 #### Graph
@@ -50,6 +43,20 @@ cargo doc --open
 > - [ ] bitcoin POW
 > - [ ] ethereum POW
 > - [ ] raft
+
+## Only For Exercise
+#### Linked List
+> - [x] [one-way](src/data_structure/linkedlist/one_way.rs)
+> - [x] [two-way](src/data_structure/linkedlist/two_way.rs)
+
+#### Tree
+> - [x] [huffman tree](src/data_structure/tree/huffman.rs)(include a complete huffman-serde implement)
+> - [x] [trie](src/data_structure/tree/trie.rs)
+> - [x] [patricia trie](src/data_structure/tree/patricia_trie.rs): [v1, common use], [v2, append only style]
+> - [ ] B
+> - [ ] B+
+> - [ ] red-black tree
+> - [ ] AVL
 
 #### Optimize algorithm using mathematical theorems
 > - [ ] 数学定理
