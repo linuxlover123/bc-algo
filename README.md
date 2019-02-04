@@ -1,6 +1,4 @@
 # bc-algo
-## data structure and algorithms for blockchain    
-    
 > 使用 Rust 语言**全新实现**的数据结构与算法集合，    
 > 其中的大部分与区块链领域中某个实际应用场景相关；    
 > 短期目标是加深自身对**区块链底层设施**的理解，    
@@ -9,16 +7,16 @@
 > 但**不苛求语言层面的优化**（如：基于标准库而不是 core 库等）。    
 > 正所谓“光说不练假把式”，看十个别人的算法实现，不如自己亲手实现一个！    
 
-## 配套文档
+# 文档
 ```
 cargo doc --open
 ```
 
-## Ready For Production
+# Ready For Production
 #### Tree
 > - [x] [MPT](src/data_structure/tree/mpt.rs)(merkle patricia trie)
 
-## Develop In Process
+# Develop In Process
 #### Bloom Filter
 > - [x] [origin](src/data_structure/bloomfilter/origin.rs)
 > - [x] [partial](src/data_structure/bloomfilter/partial.rs)
@@ -44,7 +42,7 @@ cargo doc --open
 > - [ ] ethereum POW
 > - [ ] raft
 
-## Only For Exercise
+# Only For Exercise
 #### Linked List
 > - [x] [one-way](src/draft_for_exercise/linkedlist/one_way.rs)
 > - [x] [two-way](src/draft_for_exercise/linkedlist/two_way.rs)
