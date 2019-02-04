@@ -18,7 +18,7 @@ cargo doc --open
 #### Tree
 > - [x] [MPT](src/data_structure/tree/mpt.rs)(merkle patricia trie)
 
-## Development In Process
+## Develop In Process
 #### Bloom Filter
 > - [x] [origin](src/data_structure/bloomfilter/origin.rs)
 > - [x] [partial](src/data_structure/bloomfilter/partial.rs)
@@ -46,13 +46,13 @@ cargo doc --open
 
 ## Only For Exercise
 #### Linked List
-> - [x] [one-way](src/data_structure/linkedlist/one_way.rs)
-> - [x] [two-way](src/data_structure/linkedlist/two_way.rs)
+> - [x] [one-way](src/draft_for_exercise/linkedlist/one_way.rs)
+> - [x] [two-way](src/draft_for_exercise/linkedlist/two_way.rs)
 
 #### Tree
-> - [x] [huffman tree](src/data_structure/tree/huffman.rs)(include a complete huffman-serde implement)
-> - [x] [trie](src/data_structure/tree/trie.rs)
-> - [x] [patricia trie](src/data_structure/tree/patricia_trie.rs): [v1, common use], [v2, append only style]
+> - [x] [huffman tree](src/draft_for_exercise/tree/huffman.rs)(include a complete huffman-serde implement)
+> - [x] [trie](src/draft_for_exercise/tree/trie.rs)
+> - [x] [patricia trie](src/draft_for_exercise/tree/patricia_trie.rs): [v1, common use], [v2, append only style]
 > - [ ] B
 > - [ ] B+
 > - [ ] red-black tree
