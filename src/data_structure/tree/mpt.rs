@@ -12,45 +12,26 @@
 //! - <font color=Red>×</font> 多线程安全
 //! - <font color=Red>×</font> 无 unsafe 代码
 
-use lazy_static::lazy_static;
-use ring::digest::{Context, SHA1};
 use std::error::Error;
 use std::fmt::Display;
 use std::rc::{Rc, Weak};
 
-lazy_static! {
-    static ref HASH_LEN: usize = hash(&[&1i32.to_be_bytes()[..]]).len();
-}
-
-macro_rules! check_hash_len {
-    ($hash: expr) => {
-        if $hash.len() != *HASH_LEN {
-            return Err(XErr::HashLen);
-        }
-    };
-}
-
-//- ##### 最终的哈希值
-//- @item[in]: 一个或多个哈希对象的有序集合，
-//效果相当于把其中的所有元素按序串连起来之后，统一取哈希
-#[inline]
-fn hash(item: &[&[u8]]) -> Vec<u8> {
-    let mut context = Context::new(&SHA1);
-    for x in item {
-        context.update(x);
-    }
-    context.finish().as_ref().to_vec()
-}
-
 type HashSig = Vec<u8>;
 type Value = Vec<u8>;
 
+///- ##### 哈希函数
+///- @[in]: 一个或多个哈希对象的有序集合，
+///效果相当于把其中的所有元素按序串连起来之后，统一取哈希
+pub type HashFunc = Box<dyn Fn(&[&[u8]]) -> Vec<u8>>;
+
 ///- @glob_keyset: 全局所有的key统一存放于此，按首字节有序排列
 ///- @root: root节点的children的排列順序与glob_keyset是完全一致的
-#[derive(Default)]
 pub struct MPT {
     glob_keyset: Vec<Rc<HashSig>>,
     root: Rc<Node>,
+
+    hash_len: usize,
+    hash_func: HashFunc,
 }
 
 ///- @keybase: 指向当前节点的key在全局KeySet中位置，root结点置为Rc::new(vec![])；
@@ -60,7 +41,7 @@ pub struct MPT {
 ///- @hash: 叶节点对value取哈希，分支节点首先将所有children的哈希按序串连起来，然后取其哈希
 ///- @parent: 使用Weak结构，不需要在外面再套一层Option结构，第一层节点全部置为Weak::new()
 ///- @children: 下层节点的指针集合
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub struct Node {
     keybase: Rc<HashSig>,
     keyidx: [usize; 2],
@@ -80,10 +61,17 @@ pub struct ProofPath {
 }
 
 impl MPT {
-    pub fn new() -> MPT {
+    #[inline(always)]
+    fn check_hash_len(&self, h: &[u8]) -> bool {
+        h.len() == self.hash_len
+    }
+
+    pub fn new(hash_func: HashFunc) -> MPT {
         MPT {
             glob_keyset: vec![],
             root: Rc::new(Node::new()),
+            hash_len: hash_func(&[&1i32.to_be_bytes()[..]]).len(),
+            hash_func,
         }
     }
 
@@ -100,7 +88,10 @@ impl MPT {
     ///否则返回可在之后插入的节点信息，若之后插入该值，则本返回值即为其父节点
     ///- @key[in]: 某个value的哈希值
     pub fn query(&self, key: &[u8]) -> Result<Rc<Node>, XErr> {
-        check_hash_len!(key);
+        if !self.check_hash_len(key) {
+            return Err(XErr::HashLen);
+        }
+
         let mut res = Err(XErr::Unknown);
         Self::query_inner(Rc::clone(&self.root), key, &mut res);
         res
@@ -148,9 +139,9 @@ impl MPT {
     ///####获取merkle proof
     ///- #: 计算出的根哈希
     ///- @path[in]: 通过get_proof_path函数得到的merkle路径
-    pub fn proof(path: Vec<ProofPath>) -> Vec<u8> {
+    pub fn proof(&self, path: Vec<ProofPath>) -> Vec<u8> {
         for (i, _) in path.iter().enumerate().rev().skip(1).rev() {
-            if hash(
+            if (self.hash_func)(
                 &path[i]
                     .hashs
                     .iter()
@@ -165,7 +156,7 @@ impl MPT {
 
         path.last()
             .map(|p| {
-                hash(
+                (self.hash_func)(
                     p.hashs
                         .iter()
                         .map(|h| h.as_slice())
@@ -181,7 +172,7 @@ impl MPT {
     ///失败则返回key重复的已有节点信息，**只有在出现哈希碰撞时才会出现**，此值永远无法原样插入！
     ///- @value: 要插入的新值，对应的key通过对其取哈希得到
     pub fn insert(&mut self, value: Value) -> Result<Rc<Node>, XErr> {
-        let key = hash(&[&value]);
+        let key = (self.hash_func)(&[&value]);
         let exists = self.query(&key);
         match exists {
             Ok(n) => {
@@ -204,7 +195,7 @@ impl MPT {
                         self.glob_keyset.insert(i, Rc::new(newkey));
 
                         let res = self.insert_inner(Rc::clone(&n), &key, value);
-                        res.refresh_hash(); //逆向重塑哈希
+                        self.refresh_hash(&res); //逆向重塑哈希
                         Ok(res)
                     }
                     _ => Err(e),
@@ -235,7 +226,7 @@ impl MPT {
                         hash: vec![], //此处暂时留空，后续操作会刷新此值
                     });
 
-                    let h = hash(&[&value]);
+                    let h = (self.hash_func)(&[&value]);
                     let leaf_new = Rc::new(Node {
                         keybase: Rc::clone(&me.keybase),
                         keyidx: [me.keyidx[0] + i + 1, key.len() - 1],
@@ -296,10 +287,10 @@ impl MPT {
                     .binary_search_by(|h| h[..].cmp(&key[..]))
                     .unwrap(); //调用insert之前，已在KeySet中插入key
 
-                let h = hash(&[&value]);
+                let h = (self.hash_func)(&[&value]);
                 let leaf_new = Rc::new(Node {
                     keybase: Rc::clone(&self.glob_keyset[idx]),
-                    keyidx: [0, *HASH_LEN - 1],
+                    keyidx: [0, self.hash_len - 1],
                     value: Some(value),
                     children: Vec::with_capacity(0),
                     parent: Rc::downgrade(&me),
@@ -317,6 +308,27 @@ impl MPT {
             }
         }
     }
+
+    //#### 插入新值后，递归向上刷新父节点的哈希
+    fn refresh_hash(&self, leaf: &Node) {
+        if let Some(mut p) = Weak::upgrade(&leaf.parent) {
+            unsafe {
+                let raw = Rc::into_raw(p) as *mut Node;
+                (*raw).hash = (self.hash_func)(
+                    &(*raw)
+                        .children
+                        .iter()
+                        .map(|node| node.hash.as_slice())
+                        .collect::<Vec<&[u8]>>(),
+                );
+                p = Rc::from_raw(raw);
+            }
+            self.refresh_hash(&p);
+        } else {
+            //不存在父节点，说明已递归到root节点
+            return;
+        }
+    }
 }
 
 impl Node {
@@ -328,27 +340,6 @@ impl Node {
             hash: vec![],
             parent: Weak::new(),
             children: vec![],
-        }
-    }
-
-    //#### 插入新值后，递归向上刷新父节点的哈希
-    fn refresh_hash(&self) {
-        if let Some(mut p) = Weak::upgrade(&self.parent) {
-            unsafe {
-                let raw = Rc::into_raw(p) as *mut Node;
-                (*raw).hash = hash(
-                    &(*raw)
-                        .children
-                        .iter()
-                        .map(|node| node.hash.as_slice())
-                        .collect::<Vec<&[u8]>>(),
-                );
-                p = Rc::from_raw(raw);
-            }
-            p.refresh_hash();
-        } else {
-            //不存在父节点，说明已递归到root节点
-            return;
         }
     }
 
@@ -418,13 +409,23 @@ impl Error for XErr {
 mod test {
     use super::*;
     use rand::random;
+    use ring::digest::{Context, SHA1};
+
+    #[inline(always)]
+    fn hash(item: &[&[u8]]) -> Vec<u8> {
+        let mut context = Context::new(&SHA1);
+        for x in item {
+            context.update(x);
+        }
+        context.finish().as_ref().to_vec()
+    }
 
     const N: usize = 1117;
 
     #[test]
     fn mpt() {
         let mut sample = vec![];
-        let mut mpt = MPT::new();
+        let mut mpt = MPT::new(Box::new(hash));
 
         (0..N).for_each(|_| sample.push(random::<u128>().to_be_bytes().to_vec()));
         sample.sort();
@@ -444,7 +445,7 @@ mod test {
         for v in sample.iter() {
             h = hash(&[v]);
             assert_eq!(v, &mpt.query_value(&h).unwrap().unwrap());
-            assert_eq!(mpt.root.hash, MPT::proof(mpt.get_proof_path(&h).unwrap()));
+            assert_eq!(mpt.root.hash, mpt.proof(mpt.get_proof_path(&h).unwrap()));
         }
     }
 }
