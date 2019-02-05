@@ -59,9 +59,9 @@ pub struct ProofPath {
 
 #[inline(always)]
 fn sha1_hash(item: &[&[u8]]) -> Vec<u8> {
-    use ring::digest::{Context, SHA1};
+    use ring::digest::{Context, SHA256};
 
-    let mut context = Context::new(&SHA1);
+    let mut context = Context::new(&SHA256);
     for x in item {
         context.update(x);
     }
@@ -99,7 +99,8 @@ impl MPT {
     ///#### 查找是否存在某个key对应的value
     ///- #: 返回查找结果的引用
     ///- @key[in]: 查找对象
-    pub fn query_value(&self, key: &[u8]) -> Result<Option<Value>, XErr> {
+    #[inline(always)]
+    pub fn get(&self, key: &[u8]) -> Result<Option<Value>, XErr> {
         let n = self.query(key)?;
         Ok(n.value.as_ref().cloned())
     }
@@ -192,11 +193,17 @@ impl MPT {
         Ok(path)
     }
 
+    ///#### 同insert
+    #[inline(always)]
+    pub fn set(&mut self, value: Value) -> Result<Rc<Node>, XErr> {
+        self.insert(value)
+    }
+
     ///#### 插入新值
     ///- #: 插入成功(key已存在且value相同的情况也视为成功)返回新节点信息，
     ///失败则返回key重复的已有节点信息，**只有在出现哈希碰撞时才会出现**，此值永远无法原样插入！
     ///- @value: 要插入的新值，对应的key通过对其取哈希得到
-    pub fn insert(&mut self, value: Value) -> Result<Rc<Node>, XErr> {
+    fn insert(&mut self, value: Value) -> Result<Rc<Node>, XErr> {
         let key = (self.hash_func)(&[&value]);
         let exists = self.query(&key);
         match exists {
@@ -447,7 +454,7 @@ mod test {
         sample.dedup();
 
         for v in sample.iter().cloned() {
-            mpt.insert(v).unwrap();
+            mpt.set(v).unwrap();
         }
 
         assert_eq!(sample.len(), mpt.glob_keyset.len());
@@ -459,7 +466,7 @@ mod test {
         let mut h;
         for v in sample.iter() {
             h = (mpt.hash())(&[v]);
-            assert_eq!(v, &mpt.query_value(&h).unwrap().unwrap());
+            assert_eq!(v, &mpt.get(&h).unwrap().unwrap());
             assert!(mpt.proof(&h).unwrap());
         }
     }
