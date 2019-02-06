@@ -11,106 +11,169 @@
 //! #### 实现属性
 //! - <font color=Red>×</font> 多线程安全
 //! - <font color=Red>×</font> 无 unsafe 代码
+//!
+//! #### Example
+//!```
+//!    use bc_algo::data_structure::tree::mpt::*;
+//!    use rand::random;
+//!
+//!    fn main() {
+//!        let mut sample = vec![];
+//!        let mut hashsigs = vec![];
+//!        let mut mpt = MPT::default();
+//!
+//!        (0..1117).for_each(|_| sample.push(random::<u128>()));
+//!        sample.sort();
+//!        sample.dedup();
+//!
+//!        for v in sample.iter().cloned() {
+//!            hashsigs.push(mpt.put(v).unwrap());
+//!        }
+//!
+//!        assert_eq!(sample.len(), mpt.glob_keyset_len());
+//!
+//!        assert!(0 < mpt.root_children_len());
+//!        assert!(mpt.root_children_len() <= mpt.glob_keyset_len());
+//!
+//!        assert!(!mpt.root_hashsig().is_empty());
+//!        for (v, h) in sample.iter().zip(hashsigs.iter()) {
+//!            assert_eq!(v, &mpt.get(h).unwrap().unwrap());
+//!            assert!(mpt.proof(h).unwrap());
+//!        }
+//!    }
+//!```
 
 use std::error::Error;
 use std::fmt::Display;
 use std::rc::{Rc, Weak};
 
-type HashSig = Vec<u8>;
-type Value = Vec<u8>;
-
-pub type HashFunc = Box<dyn Fn(&[&[u8]]) -> Vec<u8>>;
-
-///- @glob_keyset: 全局所有的key统一存放于此，按首字节有序排列
-///- @root: root节点的children的排列順序与glob_keyset是完全一致的
-pub struct MPT {
-    glob_keyset: Vec<Rc<HashSig>>,
-    root: Rc<Node>,
-
-    hash_len: usize,
-    hash_func: HashFunc,
+pub trait AsBytes {
+    fn as_bytes(&self) -> Box<[u8]>;
 }
 
-///- @keybase: 指向当前节点的key在全局KeySet中位置，root结点置为Rc::new(vec![])；
-///- @keyidx: 当前节点的key，存储的是索引区间，取值规则是`前后均包含`；root结点置为[0, 0]；
-///所有操作都是根结节开始的，其索引的对象是已知的，故无需存储指向索引对象的指针
-///- @value: 被索引的最终数据，如某个区块中收录的交易集合等，所有非叶节点都是None
-///- @hash: 叶节点对value取哈希，分支节点首先将所有children的哈希按序串连起来，然后取其哈希
-///- @parent: 使用Weak结构，不需要在外面再套一层Option结构，第一层节点全部置为Weak::new()
-///- @children: 下层节点的指针集合
+type HashSig = Box<[u8]>;
+pub type HashFunc = Box<dyn Fn(&[&[u8]]) -> Box<[u8]>>;
+
+//- @glob_keyset: 全局所有的key统一存放于此，按首字节有序排列
+//- @root: root节点的children的排列順序与glob_keyset是完全一致的
+//- @hashsig_len: 哈希值的字节长度
+//- @hash: 哈希函数指针
+pub struct MPT<V: Clone + AsBytes> {
+    glob_keyset: Vec<Rc<HashSig>>,
+    root: Rc<Node<V>>,
+
+    hashsig_len: usize,
+    hash: HashFunc,
+}
+
+//- @keybase: 指向当前节点的key在全局KeySet中位置，root结点置为Rc::new(vec![])；
+//- @keyidx: 当前节点的key，存储的是索引区间，取值规则是`前后均包含`；root结点置为[0, 0]；
+//所有操作都是根结节开始的，其索引的对象是已知的，故无需存储指向索引对象的指针
+//- @value: 被索引的最终数据，如某个区块中收录的交易集合等，所有非叶节点都是None
+//- @hash: 叶节点对value取哈希，分支节点首先将所有children的哈希按序串连起来，然后取其哈希
+//- @parent: 使用Weak结构，不需要在外面再套一层Option结构，第一层节点全部置为Weak::new()
+//- @children: 下层节点的指针集合
 #[derive(Debug)]
-pub struct Node {
+pub struct Node<V: Clone + AsBytes> {
     keybase: Rc<HashSig>,
     keyidx: [usize; 2],
 
-    value: Option<Value>,
-    hash: HashSig,
+    value: Option<V>,
+    hashsig: HashSig,
 
-    parent: Weak<Node>,
-    children: Vec<Rc<Node>>,
+    parent: Weak<Node<V>>,
+    children: Vec<Rc<Node<V>>>,
 }
 
-///- @selfidx: 路径上的每个节点在所有兄弟节点中的索引
-///- @hashs: 当前节点及其所有兄弟节点的哈希值的有序集合
+//- @selfidx: 路径上的每个节点在所有兄弟节点中的索引
+//- @hashsigs: 当前节点及其所有兄弟节点的哈希值的有序集合
 pub struct ProofPath {
     selfidx: usize,
-    hashs: Vec<HashSig>,
+    hashsigs: Vec<HashSig>,
 }
 
 #[inline(always)]
-fn sha1_hash(item: &[&[u8]]) -> Vec<u8> {
+fn sha1_hash(item: &[&[u8]]) -> Box<[u8]> {
     use ring::digest::{Context, SHA256};
 
     let mut context = Context::new(&SHA256);
     for x in item {
         context.update(x);
     }
-    context.finish().as_ref().to_vec()
+    context
+        .finish()
+        .as_ref()
+        .iter()
+        .cloned()
+        .collect::<Box<[u8]>>()
 }
 
-impl MPT {
+impl<V: Clone + AsBytes> MPT<V> {
+    ///#### 使用预置哈希函数被始化一个MPT实例
+    pub fn default() -> MPT<V> {
+        MPT {
+            glob_keyset: vec![],
+            root: Rc::new(Node::new()),
+            hashsig_len: sha1_hash(&[&1i32.to_be_bytes()[..]]).len(),
+            hash: Box::new(sha1_hash),
+        }
+    }
+
+    ///#### 使用自定义哈希函数被始化一个MPT实例
+    pub fn new(hash: HashFunc) -> MPT<V> {
+        MPT {
+            glob_keyset: vec![],
+            root: Rc::new(Node::new()),
+            hashsig_len: hash(&[&1i32.to_be_bytes()[..]]).len(),
+            hash,
+        }
+    }
+
+    ///- #: 返回当前MPT所使用的哈希函数指针
     #[inline(always)]
-    fn check_hash_len(&self, h: &[u8]) -> bool {
-        h.len() == self.hash_len
-    }
-
-    pub fn default() -> MPT {
-        MPT {
-            glob_keyset: vec![],
-            root: Rc::new(Node::new()),
-            hash_len: sha1_hash(&[&1i32.to_be_bytes()[..]]).len(),
-            hash_func: Box::new(sha1_hash),
-        }
-    }
-
-    pub fn new(hash_func: HashFunc) -> MPT {
-        MPT {
-            glob_keyset: vec![],
-            root: Rc::new(Node::new()),
-            hash_len: hash_func(&[&1i32.to_be_bytes()[..]]).len(),
-            hash_func,
-        }
-    }
-
     pub fn hash(&self) -> &HashFunc {
-        &self.hash_func
+        &self.hash
+    }
+
+    //#### 检查输入的hashsig长度是否合法
+    #[inline(always)]
+    fn check_hashsig_len(&self, h: &[u8]) -> bool {
+        h.len() == self.hashsig_len
+    }
+
+    ///- #: 全局根哈希
+    #[inline(always)]
+    pub fn root_hashsig(&self) -> &[u8] {
+        &self.root.hashsig
+    }
+
+    ///- #: root节点的children数量
+    #[inline(always)]
+    pub fn root_children_len(&self) -> usize {
+        self.root.children.len()
+    }
+
+    ///- #: 返回全局所有key的数量
+    #[inline(always)]
+    pub fn glob_keyset_len(&self) -> usize {
+        self.glob_keyset.len()
     }
 
     ///#### 查找是否存在某个key对应的value
     ///- #: 返回查找结果的引用
     ///- @key[in]: 查找对象
     #[inline(always)]
-    pub fn get(&self, key: &[u8]) -> Result<Option<Value>, XErr> {
+    pub fn get(&self, key: &[u8]) -> Result<Option<V>, XErr<V>> {
         let n = self.query(key)?;
-        Ok(n.value.as_ref().cloned())
+        Ok(n.value.clone())
     }
 
     //#### 逐一检索key中的所有字节，直到检索成功或失败
     //- #: 检索成功，返回叶节点信息，
     //否则返回可在之后插入的节点信息，若之后插入该值，则本返回值即为其父节点
     //- @key[in]: 某个value的哈希值
-    fn query(&self, key: &[u8]) -> Result<Rc<Node>, XErr> {
-        if !self.check_hash_len(key) {
+    fn query(&self, key: &[u8]) -> Result<Rc<Node<V>>, XErr<V>> {
+        if !self.check_hashsig_len(key) {
             return Err(XErr::HashLen);
         }
 
@@ -125,7 +188,7 @@ impl MPT {
     //- @me[in]: 父节点
     //- @key[in]: 索引对象，即某个value的哈希值
     //- @res[out]: 执行结果写出至此
-    fn query_inner(me: Rc<Node>, key: &[u8], res: &mut Result<Rc<Node>, XErr>) {
+    fn query_inner(me: Rc<Node<V>>, key: &[u8], res: &mut Result<Rc<Node<V>>, XErr<V>>) {
         let exists = me.children.binary_search_by(|n| {
             n.keybase[n.keyidx[0]..=n.keyidx[1]].cmp(&key[n.keyidx[0]..=n.keyidx[1]])
         });
@@ -150,18 +213,18 @@ impl MPT {
 
     ///####获取merkle proof
     ///- #: 计算出的根哈希
-    ///- @path[in]: 通过get_proof_path函数得到的merkle路径
-    pub fn proof(&self, key: &[u8]) -> Result<bool, XErr> {
+    ///- @key[in]: 查找对象
+    pub fn proof(&self, key: &[u8]) -> Result<bool, XErr<V>> {
         let path = self.get_proof_path(key)?;
         for (i, _) in path.iter().enumerate().rev().skip(1).rev() {
-            if (self.hash_func)(
+            if (self.hash)(
                 &path[i]
-                    .hashs
+                    .hashsigs
                     .iter()
-                    .map(|h| h.as_slice())
+                    .map(|h| &h[..])
                     .collect::<Vec<&[u8]>>()
                     .as_slice(),
-            ) != path[i + 1].hashs[path[i + 1].selfidx]
+            ) != path[i + 1].hashsigs[path[i + 1].selfidx]
             {
                 return Ok(false);
             }
@@ -170,45 +233,45 @@ impl MPT {
         let res = path
             .last()
             .map(|p| {
-                (self.hash_func)(
-                    p.hashs
+                (self.hash)(
+                    p.hashsigs
                         .iter()
-                        .map(|h| h.as_slice())
+                        .map(|h| &h[..])
                         .collect::<Vec<&[u8]>>()
                         .as_slice(),
                 )
             })
-            .unwrap_or_else(|| vec![]);
+            .unwrap_or_else(|| Box::new([]));
 
-        Ok(self.root.hash == res)
+        Ok(self.root.hashsig == res)
     }
 
     //#### 获取指定的key存在的merkle路径证明
     //- #: 按从叶到根的順序排列的哈希集合，使用proof函数验证
     //- @key[in]: 查找对象
-    fn get_proof_path(&self, key: &[u8]) -> Result<Vec<ProofPath>, XErr> {
+    fn get_proof_path(&self, key: &[u8]) -> Result<Vec<ProofPath>, XErr<V>> {
         let n = self.query(key)?;
         let mut path = vec![];
         n.get_proof_path(&mut path);
         Ok(path)
     }
 
-    ///#### 同insert
-    #[inline(always)]
-    pub fn set(&mut self, value: Value) -> Result<Rc<Node>, XErr> {
-        self.insert(value)
-    }
-
     ///#### 插入新值
     ///- #: 插入成功(key已存在且value相同的情况也视为成功)返回新节点信息，
     ///失败则返回key重复的已有节点信息，**只有在出现哈希碰撞时才会出现**，此值永远无法原样插入！
     ///- @value: 要插入的新值，对应的key通过对其取哈希得到
-    fn insert(&mut self, value: Value) -> Result<Rc<Node>, XErr> {
-        let key = (self.hash_func)(&[&value]);
+    #[inline(always)]
+    pub fn put(&mut self, value: V) -> Result<HashSig, XErr<V>> {
+        self.insert(value).map(|i| i.hashsig.clone())
+    }
+
+    //#### 同put
+    fn insert(&mut self, value: V) -> Result<Rc<Node<V>>, XErr<V>> {
+        let key = (self.hash)(&[&value.as_bytes()[..]]);
         let exists = self.query(&key);
         match exists {
             Ok(n) => {
-                if n.hash == key {
+                if n.hashsig == key {
                     Ok(n)
                 } else {
                     Err(XErr::HashCollision(n))
@@ -222,9 +285,8 @@ impl MPT {
                             .binary_search_by(|h| h[..].cmp(&key[..]))
                             .unwrap_err();
 
-                        let mut newkey = key.to_vec();
-                        newkey.shrink_to_fit();
-                        self.glob_keyset.insert(i, Rc::new(newkey));
+                        let key = Rc::new(key);
+                        self.glob_keyset.insert(i, Rc::clone(&key));
 
                         let res = self.insert_inner(Rc::clone(&n), &key, value);
                         self.refresh_hash(&res); //逆向重塑哈希
@@ -239,7 +301,9 @@ impl MPT {
     //#### 插入新元素，self是待插入节点的父节点
     //- 若self自身无父节点，则self就是root节点，将新值直接插入到self的children中即可；
     //- 否则作为其它分支节点的children
-    fn insert_inner(&self, me: Rc<Node>, key: &[u8], value: Value) -> Rc<Node> {
+    //- @key[in]: 查找对象
+    //- @value: 要插入的新值，对应的key通过对其取哈希得到
+    fn insert_inner(&self, me: Rc<Node<V>>, key: &[u8], value: V) -> Rc<Node<V>> {
         let parent = Weak::upgrade(&me.parent);
         match parent {
             Some(p) => {
@@ -255,17 +319,17 @@ impl MPT {
                         value: None,
                         children: Vec::with_capacity(2),
                         parent: Rc::downgrade(&p),
-                        hash: vec![], //此处暂时留空，后续操作会刷新此值
+                        hashsig: Box::new([]), //此处暂时留空，后续操作会刷新此值
                     });
 
-                    let h = (self.hash_func)(&[&value]);
+                    let h = (self.hash)(&[&value.as_bytes()[..]]);
                     let leaf_new = Rc::new(Node {
                         keybase: Rc::clone(&me.keybase),
                         keyidx: [me.keyidx[0] + i + 1, key.len() - 1],
                         value: Some(value),
                         children: Vec::with_capacity(0),
                         parent: Rc::downgrade(&branch),
-                        hash: h,
+                        hashsig: h,
                     });
                     let res = Rc::clone(&leaf_new);
 
@@ -278,14 +342,14 @@ impl MPT {
                             .unwrap()],
                     );
                     unsafe {
-                        let raw = Rc::into_raw(leaf_old) as *mut Node;
+                        let raw = Rc::into_raw(leaf_old) as *mut Node<V>;
                         (*raw).keyidx = [me.keyidx[0] + i + 1, me.keyidx[1]];
                         (*raw).parent = Rc::downgrade(&branch);
                         leaf_old = Rc::from_raw(raw);
                     }
 
                     unsafe {
-                        let raw = Rc::into_raw(branch) as *mut Node;
+                        let raw = Rc::into_raw(branch) as *mut Node<V>;
                         (*raw).children.push(leaf_new);
                         (*raw).children.push(leaf_old);
                         (*raw)
@@ -302,7 +366,7 @@ impl MPT {
                         .unwrap();
 
                     unsafe {
-                        let raw = Rc::into_raw(p) as *mut Node;
+                        let raw = Rc::into_raw(p) as *mut Node<V>;
                         (*raw).children[idx] = branch;
                         Rc::from_raw(raw);
                     }
@@ -319,18 +383,18 @@ impl MPT {
                     .binary_search_by(|h| h[..].cmp(&key[..]))
                     .unwrap(); //调用insert之前，已在KeySet中插入key
 
-                let h = (self.hash_func)(&[&value]);
+                let h = (self.hash)(&[&value.as_bytes()[..]]);
                 let leaf_new = Rc::new(Node {
                     keybase: Rc::clone(&self.glob_keyset[idx]),
-                    keyidx: [0, self.hash_len - 1],
+                    keyidx: [0, self.hashsig_len - 1],
                     value: Some(value),
                     children: Vec::with_capacity(0),
                     parent: Rc::downgrade(&me),
-                    hash: h,
+                    hashsig: h,
                 });
                 let res = Rc::clone(&leaf_new);
 
-                let raw = Rc::into_raw(me) as *mut Node;
+                let raw = Rc::into_raw(me) as *mut Node<V>;
                 unsafe {
                     (*raw).children.insert(idx, leaf_new);
                     Rc::from_raw(raw);
@@ -342,15 +406,16 @@ impl MPT {
     }
 
     //#### 插入新值后，递归向上刷新父节点的哈希
-    fn refresh_hash(&self, leaf: &Node) {
+    //- @leaf[in]: put()之后产生的新节点
+    fn refresh_hash(&self, leaf: &Node<V>) {
         if let Some(mut p) = Weak::upgrade(&leaf.parent) {
             unsafe {
-                let raw = Rc::into_raw(p) as *mut Node;
-                (*raw).hash = (self.hash_func)(
+                let raw = Rc::into_raw(p) as *mut Node<V>;
+                (*raw).hashsig = (self.hash)(
                     &(*raw)
                         .children
                         .iter()
-                        .map(|node| node.hash.as_slice())
+                        .map(|node| &node.hashsig[..])
                         .collect::<Vec<&[u8]>>(),
                 );
                 p = Rc::from_raw(raw);
@@ -363,20 +428,19 @@ impl MPT {
     }
 }
 
-impl Node {
-    fn new() -> Node {
+impl<V: Clone + AsBytes> Node<V> {
+    fn new() -> Node<V> {
         Node {
-            keybase: Rc::new(vec![]),
+            keybase: Rc::new(Box::new([])),
             keyidx: [0; 2],
             value: None,
-            hash: vec![],
+            hashsig: Box::new([]),
             parent: Weak::new(),
             children: vec![],
         }
     }
 
     //#### should be a tail-recursion
-    //- @me[in]: current node
     //- @path[out]: 从叶到根的順序写出结果
     fn get_proof_path(&self, path: &mut Vec<ProofPath>) {
         if let Some(p) = Weak::upgrade(&self.parent) {
@@ -386,10 +450,10 @@ impl Node {
                     .children
                     .binary_search_by(|n| n.keybase[n.keyidx[0]].cmp(&self.keybase[self.keyidx[0]]))
                     .unwrap(),
-                hashs: p
+                hashsigs: p
                     .children
                     .iter()
-                    .map(|n| n.hash.clone())
+                    .map(|n| n.hashsig.clone())
                     .collect::<Vec<HashSig>>(),
             };
 
@@ -401,20 +465,20 @@ impl Node {
     }
 }
 
-///- @HashCollision: 哈希长度不一致
-///- @NotExists: 哈希碰撞
+///- @XErr::HashCollision: 哈希长度不一致
+///- @XErr::NotExists: 哈希碰撞
 #[derive(Debug)]
-pub enum XErr {
+pub enum XErr<V: Clone + AsBytes> {
     HashLen,
-    NotExists(Rc<Node>),
-    HashCollision(Rc<Node>),
+    NotExists(Rc<Node<V>>),
+    HashCollision(Rc<Node<V>>),
     Unknown,
 }
 
-impl Display for XErr {
+impl<V: Clone + AsBytes> Display for XErr<V> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            XErr::HashLen => write!(f, "Invalid hash length!"),
+            XErr::HashLen => write!(f, "Invalid hashsig length!"),
             XErr::NotExists(_) => write!(f, "Not exists!"),
             XErr::HashCollision(_) => write!(f, "Hash collision!"),
             XErr::Unknown => write!(f, "Unknown error!"),
@@ -422,10 +486,10 @@ impl Display for XErr {
     }
 }
 
-impl Error for XErr {
+impl<V: Clone + AsBytes + std::fmt::Debug> Error for XErr<V> {
     fn description(&self) -> &str {
         match self {
-            XErr::HashLen => "Invalid hash length!",
+            XErr::HashLen => "Invalid hashsig length!",
             XErr::NotExists(_) => "Not exists!",
             XErr::HashCollision(_) => "Hash collision!",
             XErr::Unknown => "Unknown error!",
@@ -437,37 +501,78 @@ impl Error for XErr {
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use rand::random;
-
-    const N: usize = 1117;
-
-    #[test]
-    fn mpt() {
-        let mut sample = vec![];
-        let mut mpt = MPT::default();
-
-        (0..N).for_each(|_| sample.push(random::<u128>().to_be_bytes().to_vec()));
-        sample.sort();
-        sample.dedup();
-
-        for v in sample.iter().cloned() {
-            mpt.set(v).unwrap();
+macro_rules! impl_as_bytes {
+    (@$obj: ty) => {
+        impl AsBytes for $obj {
+            fn as_bytes(&self) -> Box<[u8]> {
+                Box::new(self.to_le_bytes())
+            }
         }
-
-        assert_eq!(sample.len(), mpt.glob_keyset.len());
-
-        assert!(0 < mpt.root.children.len());
-        assert!(mpt.root.children.len() <= mpt.glob_keyset.len());
-
-        assert!(!mpt.root.hash.is_empty());
-        let mut h;
-        for v in sample.iter() {
-            h = (mpt.hash())(&[v]);
-            assert_eq!(v, &mpt.get(&h).unwrap().unwrap());
-            assert!(mpt.proof(&h).unwrap());
+    };
+    ($obj: ty) => {
+        impl AsBytes for $obj {
+            fn as_bytes(&self) -> Box<[u8]> {
+                let mut res = vec![];
+                self.iter().for_each(|i| res.extend(&i.to_le_bytes()));
+                res.into_boxed_slice()
+            }
         }
+    };
+}
+
+impl_as_bytes!(@u8);
+impl_as_bytes!(@u16);
+impl_as_bytes!(@u32);
+impl_as_bytes!(@u64);
+impl_as_bytes!(@u128);
+impl_as_bytes!(@usize);
+
+impl_as_bytes!(@i8);
+impl_as_bytes!(@i16);
+impl_as_bytes!(@i32);
+impl_as_bytes!(@i64);
+impl_as_bytes!(@i128);
+impl_as_bytes!(@isize);
+
+impl_as_bytes!(Box<[u8]>);
+impl_as_bytes!(Box<[u16]>);
+impl_as_bytes!(Box<[u32]>);
+impl_as_bytes!(Box<[u64]>);
+impl_as_bytes!(Box<[u128]>);
+impl_as_bytes!(Box<[usize]>);
+
+impl_as_bytes!(Box<[i8]>);
+impl_as_bytes!(Box<[i16]>);
+impl_as_bytes!(Box<[i32]>);
+impl_as_bytes!(Box<[i64]>);
+impl_as_bytes!(Box<[i128]>);
+impl_as_bytes!(Box<[isize]>);
+
+impl_as_bytes!(Vec<u8>);
+impl_as_bytes!(Vec<u16>);
+impl_as_bytes!(Vec<u32>);
+impl_as_bytes!(Vec<u64>);
+impl_as_bytes!(Vec<u128>);
+impl_as_bytes!(Vec<usize>);
+
+impl_as_bytes!(Vec<i8>);
+impl_as_bytes!(Vec<i16>);
+impl_as_bytes!(Vec<i32>);
+impl_as_bytes!(Vec<i64>);
+impl_as_bytes!(Vec<i128>);
+impl_as_bytes!(Vec<isize>);
+
+impl AsBytes for String {
+    fn as_bytes(&self) -> Box<[u8]> {
+        self.as_bytes().to_vec().into_boxed_slice()
     }
 }
+
+impl AsBytes for str {
+    fn as_bytes(&self) -> Box<[u8]> {
+        self.as_bytes().to_vec().into_boxed_slice()
+    }
+}
+
+#[cfg(test)]
+mod test {}
