@@ -14,7 +14,7 @@
 //!
 //! #### Example
 //!```
-//!    use bc_algo::data_structure::tree::mpt::*;
+//!    use bc_algo::mpt::*;
 //!    use rand::random;
 //!
 //!    fn main() {
@@ -37,28 +37,27 @@
 //!
 //!        assert!(!mpt.root_hashsig().is_empty());
 //!        for (v, h) in sample.iter().zip(hashsigs.iter()) {
-//!            assert_eq!(v, &mpt.get(h).unwrap().unwrap());
+//!            assert_eq!(v, &mpt.get(h).unwrap());
 //!            assert!(mpt.proof(h).unwrap());
 //!        }
 //!    }
 //!```
 
-use std::error::Error;
-use std::fmt::Display;
-use std::rc::{Rc, Weak};
+pub mod error;
+pub mod traits;
 
-pub trait AsBytes {
-    fn as_bytes(&self) -> Box<[u8]>;
-}
+use error::*;
+use std::rc::{Rc, Weak};
+use traits::*;
 
 type HashSig = Box<[u8]>;
-pub type HashFunc = Box<dyn Fn(&[&[u8]]) -> Box<[u8]>>;
+type HashFunc = Box<dyn Fn(&[&[u8]]) -> Box<[u8]>>;
 
 //- @glob_keyset: 全局所有的key统一存放于此，按首字节有序排列
 //- @root: root节点的children的排列順序与glob_keyset是完全一致的
 //- @hashsig_len: 哈希值的字节长度
 //- @hash: 哈希函数指针
-pub struct MPT<V: Clone + AsBytes> {
+pub struct MPT<V: AsBytes> {
     glob_keyset: Vec<Rc<HashSig>>,
     root: Rc<Node<V>>,
 
@@ -74,7 +73,7 @@ pub struct MPT<V: Clone + AsBytes> {
 //- @parent: 使用Weak结构，不需要在外面再套一层Option结构，第一层节点全部置为Weak::new()
 //- @children: 下层节点的指针集合
 #[derive(Debug)]
-pub struct Node<V: Clone + AsBytes> {
+pub struct Node<V: AsBytes> {
     keybase: Rc<HashSig>,
     keyidx: [usize; 2],
 
@@ -93,7 +92,7 @@ pub struct ProofPath {
 }
 
 #[inline(always)]
-fn sha1_hash(item: &[&[u8]]) -> Box<[u8]> {
+fn sha256(item: &[&[u8]]) -> Box<[u8]> {
     use ring::digest::{Context, SHA256};
 
     let mut context = Context::new(&SHA256);
@@ -108,14 +107,14 @@ fn sha1_hash(item: &[&[u8]]) -> Box<[u8]> {
         .collect::<Box<[u8]>>()
 }
 
-impl<V: Clone + AsBytes> MPT<V> {
+impl<V: AsBytes> MPT<V> {
     ///#### 使用预置哈希函数被始化一个MPT实例
     pub fn default() -> MPT<V> {
         MPT {
             glob_keyset: vec![],
             root: Rc::new(Node::new()),
-            hashsig_len: sha1_hash(&[&1i32.to_be_bytes()[..]]).len(),
-            hash: Box::new(sha1_hash),
+            hashsig_len: sha256(&[&1i32.to_be_bytes()[..]]).len(),
+            hash: Box::new(sha256),
         }
     }
 
@@ -127,12 +126,6 @@ impl<V: Clone + AsBytes> MPT<V> {
             hashsig_len: hash(&[&1i32.to_be_bytes()[..]]).len(),
             hash,
         }
-    }
-
-    ///- #: 返回当前MPT所使用的哈希函数指针
-    #[inline(always)]
-    pub fn hash(&self) -> &HashFunc {
-        &self.hash
     }
 
     //#### 检查输入的hashsig长度是否合法
@@ -163,9 +156,11 @@ impl<V: Clone + AsBytes> MPT<V> {
     ///- #: 返回查找结果的引用
     ///- @key[in]: 查找对象
     #[inline(always)]
-    pub fn get(&self, key: &[u8]) -> Result<Option<V>, XErr<V>> {
-        let n = self.query(key)?;
-        Ok(n.value.clone())
+    pub fn get(&self, key: &[u8]) -> Option<V> {
+        match self.query(key) {
+            Ok(n) => n.value.clone(),
+            Err(_) => None,
+        }
     }
 
     //#### 逐一检索key中的所有字节，直到检索成功或失败
@@ -257,7 +252,7 @@ impl<V: Clone + AsBytes> MPT<V> {
     }
 
     ///#### 插入新值
-    ///- #: 插入成功(key已存在且value相同的情况也视为成功)返回新节点信息，
+    ///- #: 插入成功(key已存在且value相同的情况也视为成功)返回value的哈希值(即：key)，
     ///失败则返回key重复的已有节点信息，**只有在出现哈希碰撞时才会出现**，此值永远无法原样插入！
     ///- @value: 要插入的新值，对应的key通过对其取哈希得到
     #[inline(always)]
@@ -265,7 +260,10 @@ impl<V: Clone + AsBytes> MPT<V> {
         self.insert(value).map(|i| i.hashsig.clone())
     }
 
-    //#### 同put
+    //#### 插入新值
+    //- #: 插入成功(key已存在且value相同的情况也视为成功)返回新节点信息，
+    //失败则返回key重复的已有节点信息，**只有在出现哈希碰撞时才会出现**，此值永远无法原样插入！
+    //- @value: 要插入的新值，对应的key通过对其取哈希得到
     fn insert(&mut self, value: V) -> Result<Rc<Node<V>>, XErr<V>> {
         let key = (self.hash)(&[&value.as_bytes()[..]]);
         let exists = self.query(&key);
@@ -428,7 +426,7 @@ impl<V: Clone + AsBytes> MPT<V> {
     }
 }
 
-impl<V: Clone + AsBytes> Node<V> {
+impl<V: AsBytes> Node<V> {
     fn new() -> Node<V> {
         Node {
             keybase: Rc::new(Box::new([])),
@@ -465,114 +463,97 @@ impl<V: Clone + AsBytes> Node<V> {
     }
 }
 
-///- @XErr::HashCollision: 哈希长度不一致
-///- @XErr::NotExists: 哈希碰撞
-#[derive(Debug)]
-pub enum XErr<V: Clone + AsBytes> {
-    HashLen,
-    NotExists(Rc<Node<V>>),
-    HashCollision(Rc<Node<V>>),
-    Unknown,
-}
-
-impl<V: Clone + AsBytes> Display for XErr<V> {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            XErr::HashLen => write!(f, "Invalid hashsig length!"),
-            XErr::NotExists(_) => write!(f, "Not exists!"),
-            XErr::HashCollision(_) => write!(f, "Hash collision!"),
-            XErr::Unknown => write!(f, "Unknown error!"),
-        }
-    }
-}
-
-impl<V: Clone + AsBytes + std::fmt::Debug> Error for XErr<V> {
-    fn description(&self) -> &str {
-        match self {
-            XErr::HashLen => "Invalid hashsig length!",
-            XErr::NotExists(_) => "Not exists!",
-            XErr::HashCollision(_) => "Hash collision!",
-            XErr::Unknown => "Unknown error!",
-        }
-    }
-
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        None
-    }
-}
-
-macro_rules! impl_as_bytes {
-    (@$obj: ty) => {
-        impl AsBytes for $obj {
-            fn as_bytes(&self) -> Box<[u8]> {
-                Box::new(self.to_le_bytes())
-            }
-        }
-    };
-    ($obj: ty) => {
-        impl AsBytes for $obj {
-            fn as_bytes(&self) -> Box<[u8]> {
-                let mut res = vec![];
-                self.iter().for_each(|i| res.extend(&i.to_le_bytes()));
-                res.into_boxed_slice()
-            }
-        }
-    };
-}
-
-impl_as_bytes!(@u8);
-impl_as_bytes!(@u16);
-impl_as_bytes!(@u32);
-impl_as_bytes!(@u64);
-impl_as_bytes!(@u128);
-impl_as_bytes!(@usize);
-
-impl_as_bytes!(@i8);
-impl_as_bytes!(@i16);
-impl_as_bytes!(@i32);
-impl_as_bytes!(@i64);
-impl_as_bytes!(@i128);
-impl_as_bytes!(@isize);
-
-impl_as_bytes!(Box<[u8]>);
-impl_as_bytes!(Box<[u16]>);
-impl_as_bytes!(Box<[u32]>);
-impl_as_bytes!(Box<[u64]>);
-impl_as_bytes!(Box<[u128]>);
-impl_as_bytes!(Box<[usize]>);
-
-impl_as_bytes!(Box<[i8]>);
-impl_as_bytes!(Box<[i16]>);
-impl_as_bytes!(Box<[i32]>);
-impl_as_bytes!(Box<[i64]>);
-impl_as_bytes!(Box<[i128]>);
-impl_as_bytes!(Box<[isize]>);
-
-impl_as_bytes!(Vec<u8>);
-impl_as_bytes!(Vec<u16>);
-impl_as_bytes!(Vec<u32>);
-impl_as_bytes!(Vec<u64>);
-impl_as_bytes!(Vec<u128>);
-impl_as_bytes!(Vec<usize>);
-
-impl_as_bytes!(Vec<i8>);
-impl_as_bytes!(Vec<i16>);
-impl_as_bytes!(Vec<i32>);
-impl_as_bytes!(Vec<i64>);
-impl_as_bytes!(Vec<i128>);
-impl_as_bytes!(Vec<isize>);
-
-impl AsBytes for String {
-    fn as_bytes(&self) -> Box<[u8]> {
-        self.as_bytes().to_vec().into_boxed_slice()
-    }
-}
-
-impl AsBytes for str {
-    fn as_bytes(&self) -> Box<[u8]> {
-        self.as_bytes().to_vec().into_boxed_slice()
-    }
-}
-
 #[cfg(test)]
-mod test {}
+mod test {
+    macro_rules! source_type_test {
+        ($name: ident, $type: ty) => {
+            mod $name {
+                use super::super::*;
+                use rand::random;
+
+                pub fn rand() -> Vec<impl AsBytes> {
+                    let mut sample = vec![];
+                    (0..500).for_each(|_| sample.push(random::<$type>()));
+                    sample.sort();
+                    sample.dedup();
+                    sample
+                }
+
+                pub fn rand_box() -> Vec<impl AsBytes> {
+                    let mut sample = vec![];
+                    (0..500).for_each(|_| {
+                        sample.push(
+                            (0..10)
+                                .into_iter()
+                                .map(|_| random::<$type>())
+                                .collect::<Box<[$type]>>(),
+                        )
+                    });
+                    sample.sort();
+                    sample.dedup();
+                    sample
+                }
+
+                pub fn rand_vec() -> Vec<impl AsBytes> {
+                    let mut sample = vec![];
+                    (0..500).for_each(|_| {
+                        sample.push(
+                            (0..10)
+                                .into_iter()
+                                .map(|_| random::<$type>())
+                                .collect::<Vec<$type>>(),
+                        )
+                    });
+                    sample.sort();
+                    sample.dedup();
+                    sample
+                }
+
+                pub fn $name<T: AsBytes>(sample: Vec<T>) {
+                    let mut hashsigs = vec![];
+                    let mut mpt = MPT::default();
+
+                    for v in sample.iter().cloned() {
+                        hashsigs.push(mpt.put(v).unwrap());
+                    }
+
+                    assert_eq!(sample.len(), mpt.glob_keyset_len());
+
+                    assert!(0 < mpt.root_children_len());
+                    assert!(mpt.root_children_len() <= mpt.glob_keyset_len());
+
+                    assert!(!mpt.root_hashsig().is_empty());
+                    for (v, h) in sample.iter().zip(hashsigs.iter()) {
+                        assert_eq!(v, &mpt.get(h).unwrap());
+                        assert!(mpt.proof(h).unwrap());
+                    }
+                }
+            }
+
+            #[test]
+            fn $name() {
+                let sample0 = $name::rand();
+                let sample1 = $name::rand_box();
+                let sample2 = $name::rand_vec();
+
+                $name::$name(sample0);
+                $name::$name(sample1);
+                $name::$name(sample2);
+            }
+        };
+    }
+
+    source_type_test!(_char, char);
+    source_type_test!(_u8, u8);
+    source_type_test!(_u16, u16);
+    source_type_test!(_u32, u32);
+    source_type_test!(_u64, u64);
+    source_type_test!(_u128, u128);
+    source_type_test!(_usize, usize);
+    source_type_test!(_i8, i8);
+    source_type_test!(_i16, i16);
+    source_type_test!(_i32, i32);
+    source_type_test!(_i64, i64);
+    source_type_test!(_i128, i128);
+    source_type_test!(_isize, isize);
+}
