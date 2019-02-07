@@ -14,12 +14,12 @@ cargo doc --open
 
 # Ready For Production
 #### Tree
-> - [x] [MPT](src/data_structure/tree/mpt.rs)(merkle patricia trie)
+> - [x] [MPT](src/data_structure/tree/mpt)(merkle patricia trie)
 > - [ ] [hashtrie](src/data_structure/tree/hashtrie.rs)(hashmap based on patricia trie)
 
 # Develop In Process
 #### Tree
-> - [ ] [skip list](src/data_structure/tree/skip_list.rs): [v1, 2-step], [v2, N-step]
+> - [ ] [skip list](src/data_structure/tree/skiplist.rs): [v1, 2-step], [v2, N-step]
 > - [ ] [MSL](src/data_structure/tree/msl.rs)(merkle skip list)
 > - [ ] [RLP](src/data_structure/tree/rlp.rs)(RLP [de]serialize algorithm used in ethereum)
 
