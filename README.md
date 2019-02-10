@@ -15,7 +15,6 @@ cargo doc --open
 # Ready For Production
 #### Tree
 > - [x] [MPT](src/data_structure/tree/mpt)(merkle patricia trie)
-> - [ ] [hashtrie](src/data_structure/tree/hashtrie.rs)(hashmap based on patricia trie)
 
 # Develop In Process
 #### Tree

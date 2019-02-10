@@ -51,7 +51,7 @@ use std::rc::{Rc, Weak};
 use traits::*;
 
 type HashSig = Box<[u8]>;
-type HashFunc = Box<dyn Fn(&[&[u8]]) -> Box<[u8]>>;
+type HashFunc = Box<dyn Fn(&[&[u8]]) -> HashSig>;
 
 //- @glob_keyset: 全局所有的key统一存放于此，按首字节有序排列
 //- @root: root节点的children的排列順序与glob_keyset是完全一致的
@@ -269,7 +269,7 @@ impl<V: AsBytes> MPT<V> {
         let exists = self.query(&key);
         match exists {
             Ok(n) => {
-                if n.hashsig == key {
+                if n.value.as_ref().unwrap() == &value {
                     Ok(n)
                 } else {
                     Err(XErr::HashCollision(n))
