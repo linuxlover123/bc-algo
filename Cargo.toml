@@ -12,3 +12,6 @@ lazy_static = "1.2.0"
 
 [dev-dependencies]
 rand = "0.6.4"
+
+[profile.bench]
+codegen-units = 1
