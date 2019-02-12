@@ -39,7 +39,7 @@ pub struct SkipList<V: AsBytes> {
 
 //- @key: 用于索引的键，由HashFunc(V)得到
 //- @value: 被索引的目标
-//- @hash: 各节点的merkle路径哈希值
+//- @merklesig: 各节点的merkle路径哈希值
 //- @lower: 下侧节点(一对一，只存储下层的第一个节点)
 //- @upper: 上侧节点(多对一)
 //- @left: 左侧节点(一对一)
@@ -47,9 +47,7 @@ pub struct SkipList<V: AsBytes> {
 pub struct Node<V: AsBytes> {
     key: Rc<HashSig>,
     value: Rc<V>,
-
     merklesig: HashSig,
-
     lower: Option<Rc<Node<V>>>,
     upper: Weak<Node<V>>,
     left: Option<Rc<Node<V>>>,
@@ -89,7 +87,7 @@ impl<V: AsBytes> SkipList<V> {
 
     //#### 查询数据
     //- #: 成功返回目标节点指针，
-    //失败返回错误原因(其中不存在的情况，返回可插入位值的左兄弟指针)
+    //失败返回错误原因(其中不存在的情况，返回可插入位置的左兄弟指针)
     fn get_inner(&self, key: &[u8]) -> Result<Rc<Node<V>>, XErr<V>> {
         unimplemented!();
     }
@@ -106,7 +104,7 @@ impl<V: AsBytes> SkipList<V> {
     }
 
     //#### 创建新节点
-    fn new_node(&self, value: V, merklesig: HashSig) -> Node<V> {
+    fn new_node(&self, key: HashSig, value: V, merklesig: HashSig) -> Node<V> {
         Node {
             key: Rc::new((self.hash)(&[&value.as_bytes()[..]])),
             value: Rc::new(value),
@@ -119,9 +117,24 @@ impl<V: AsBytes> SkipList<V> {
     }
 
     ///#### 插入数据，并按需调整整体的数据结构
-    pub fn put(&self, value: V) -> Result<(), XErr<V>> {
-        let mut node = self.new_node(value, Box::new([1, 2, 3]));
-        unimplemented!();
+    pub fn put(&self, value: V) -> Result<HashSig, XErr<V>> {
+        if self.root.is_none() {
+
+        } else {
+            let sig = self.hash(&[&value.as_bytes()[..]]);
+            match self.get_inner(&sig[..]) {
+                Ok(n) => {
+                    if n.value == &value {
+                        Ok(sig)
+                    } else {
+                        Err(XErr::HashCollision(n))
+                    }
+                }
+                Err(n) => {
+                    //let r = Rc::
+                }
+            }
+        }
     }
 
     ///####获取merkle proof
@@ -279,21 +292,21 @@ mod test {
 
                 pub fn $name<T: AsBytes>(sample: Vec<T>) {
                     let mut hashsigs = vec![];
-                    let mut mpt = MPT::default();
+                    let mut sl = SkipList::default();
 
                     for v in sample.iter().cloned() {
-                        hashsigs.push(mpt.put(v).unwrap());
+                        hashsigs.push(sl.put(v).unwrap());
                     }
 
-                    assert_eq!(sample.len(), mpt.glob_keyset_len());
+                    assert_eq!(sample.len(), sl.glob_keyset_len());
 
-                    assert!(0 < mpt.root_children_len());
-                    assert!(mpt.root_children_len() <= mpt.glob_keyset_len());
+                    assert!(0 < sl.root_children_len());
+                    assert!(sl.root_children_len() <= sl.glob_keyset_len());
 
-                    assert!(!mpt.root_hashsig().is_empty());
+                    assert!(!sl.root_hashsig().is_esly());
                     for (v, h) in sample.iter().zip(hashsigs.iter()) {
-                        assert_eq!(v, &mpt.get(h).unwrap());
-                        assert!(mpt.proof(h).unwrap());
+                        assert_eq!(v, &sl.get(h).unwrap());
+                        assert!(sl.proof(h).unwrap());
                     }
                 }
             }

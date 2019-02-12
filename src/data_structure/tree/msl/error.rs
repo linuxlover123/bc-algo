@@ -5,7 +5,7 @@ use std::{error::Error, fmt, rc::Rc};
 ///- @XErr::HashCollision: 哈希碰撞
 pub enum XErr<V: AsBytes> {
     HashLen,
-    NotExists(Rc<Node<V>>),
+    NotExists(Option<Rc<Node<V>>>),
     HashCollision(Rc<Node<V>>),
     Unknown,
 }
