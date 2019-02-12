@@ -55,13 +55,13 @@ pub struct Node<V: AsBytes> {
     right: Weak<Node<V>>,
 }
 
-//- @self_nodes: 自身所在单元的节点集合
-//- @left_nodes: 左邻单元的节点集合
-//- @right_nodes: 右邻单元的节点集合
+//- @self_unit: 自身所在单元的节点集合
+//- @left_unit: 左邻单元的节点集合
+//- @right_unit: 右邻单元的节点集合
 struct Adjacency<V: AsBytes> {
-    self_nodes: Vec<Rc<Node<V>>>,
-    left_nodes: Vec<Rc<Node<V>>>,
-    right_nodes: Vec<Rc<Node<V>>>,
+    self_unit: Vec<Rc<Node<V>>>,
+    left_unit: Vec<Rc<Node<V>>>,
+    right_unit: Vec<Rc<Node<V>>>,
 }
 
 impl<V: AsBytes> SkipList<V> {
@@ -75,6 +75,7 @@ impl<V: AsBytes> SkipList<V> {
     ///#### 初始化
     ///- @unit_siz[in]: 元素数量超过此值将进行单元分裂
     pub fn init(unit_siz: usize, hash: HashFunc) -> SkipList<V> {
+        assert!(unit_siz >= 2);
         SkipList {
             root: None,
             unit_siz,
@@ -171,39 +172,6 @@ impl<V: AsBytes> SkipList<V> {
         self.get_inner(key).map(|n| (*n.value).clone()).ok()
     }
 
-    //#### 新增节点后，
-    //- 递归向上调整跳表结构，递归至最顶层时，检查是否有需要分裂的超限单元
-    //- 刷新merkle proof hashsig
-    //- should be a tail-recursion
-    fn restruct_put(&mut self, node: Rc<Node<V>>) {
-        if let Some(u) = Weak::upgrade(&node.upper) {
-            //TODO
-            self.restruct_put(u);
-        } else {
-            //TODO
-            return;
-        }
-    }
-
-    //#### 删除节点后，
-    //- 递归向上调整跳表结构，递归至最顶层时，检查是否有可以合并的相邻单元
-    //- 刷新merkle proof hashsig
-    //- should be a tail-recursion
-    fn restruct_remove(&mut self, node: Rc<Node<V>>) {
-        if let Some(u) = Weak::upgrade(&node.upper) {
-            //TODO
-            self.restruct_remove(u);
-        } else {
-            //TODO
-            return;
-        }
-    }
-
-    //#### 根据给定的节点，统计其自身所在单元及左右相邻单元的节点指针集合
-    fn adjacent_statistics(node: Rc<Node<V>>) -> Adjacency<V> {
-        unimplemented!();
-    }
-
     ///#### 删除数据，并按需调整整体的数据结构，若被删节点：
     ///1. 若左右兄弟皆为空，则说明删除的是节点总数为一的跳表的唯一节点，直接将根节点置空即可
     ///2. 若左兄弟为空，右兄弟不为空，说明删除的是首节点，只需调整右兄弟指针
@@ -260,6 +228,9 @@ impl<V: AsBytes> SkipList<V> {
         //直接基于被删节点进行重塑即可
         self.restruct_remove(Rc::clone(&node));
 
+        //重塑merkle proof hashsig
+        self.merkle_refresh(Rc::clone(&node));
+
         Ok(node)
     }
 
@@ -270,27 +241,31 @@ impl<V: AsBytes> SkipList<V> {
         let sig = (self.hash)(&[&value.as_bytes()[..]]);
         match self.get_inner(&sig[..]) {
             Ok(n) => {
-                if *n.value != value {
-                    return Err(XErr::HashCollision(n));
+                if *n.value == value {
+                    Ok(sig)
+                } else {
+                    Err(XErr::HashCollision(n))
                 }
             }
             Err(XErr::NotExists(n)) => {
+                let mut new;
                 if let Some(n) = n {
                     let raw = Rc::into_raw(Rc::clone(&n)) as *mut Node<V>;
 
                     if let Some(right) = Weak::upgrade(&n.right) {
+                        new = Rc::new(Node {
+                            key: Rc::new(sig.clone()),
+                            value: Rc::new(value),
+                            merklesig: sig.clone(),
+                            lower: None,
+                            upper: Weak::upgrade(&n.upper)
+                                .map(|u| Rc::downgrade(&u))
+                                .unwrap_or_default(),
+                            left: Some(Rc::clone(&n)),
+                            right: Rc::downgrade(&right),
+                        });
                         unsafe {
-                            (*raw).right = Rc::downgrade(&Rc::new(Node {
-                                key: Rc::new(sig.clone()),
-                                value: Rc::new(value),
-                                merklesig: sig.clone(),
-                                lower: None,
-                                upper: Weak::upgrade(&n.upper)
-                                    .map(|u| Rc::downgrade(&u))
-                                    .unwrap_or_default(),
-                                left: Some(Rc::clone(&n)),
-                                right: Rc::downgrade(&right),
-                            }));
+                            (*raw).right = Rc::downgrade(&new);
                         }
                         let raw = Rc::into_raw(Rc::clone(&right)) as *mut Node<V>;
                         unsafe {
@@ -298,18 +273,19 @@ impl<V: AsBytes> SkipList<V> {
                             Rc::from_raw(raw);
                         }
                     } else {
+                        new = Rc::new(Node {
+                            key: Rc::new(sig.clone()),
+                            value: Rc::new(value),
+                            merklesig: sig.clone(),
+                            lower: None,
+                            upper: Weak::upgrade(&n.upper)
+                                .map(|u| Rc::downgrade(&u))
+                                .unwrap_or_default(),
+                            left: Some(Rc::clone(&n)),
+                            right: Weak::new(),
+                        });
                         unsafe {
-                            (*raw).right = Rc::downgrade(&Rc::new(Node {
-                                key: Rc::new(sig.clone()),
-                                value: Rc::new(value),
-                                merklesig: sig.clone(),
-                                lower: None,
-                                upper: Weak::upgrade(&n.upper)
-                                    .map(|u| Rc::downgrade(&u))
-                                    .unwrap_or_default(),
-                                left: Some(Rc::clone(&n)),
-                                right: Weak::new(),
-                            }));
+                            (*raw).right = Rc::downgrade(&new);
                         }
                     }
 
@@ -324,7 +300,7 @@ impl<V: AsBytes> SkipList<V> {
                     }
 
                     let raw = Rc::into_raw(Rc::clone(&lowest)) as *mut Node<V>;
-                    let new = Rc::new(Node {
+                    new = Rc::new(Node {
                         key: Rc::new(sig.clone()),
                         value: Rc::new(value),
                         merklesig: sig.clone(),
@@ -370,13 +346,8 @@ impl<V: AsBytes> SkipList<V> {
                     let mut rightest = Weak::upgrade(&new.right)
                         .map(|r| Rc::downgrade(&r))
                         .unwrap_or_default();
-                    loop {
-                        if let Some(r) = Weak::upgrade(&rightest) {
-                            raw = Rc::into_raw(r) as *mut Node<V>;
-                        } else {
-                            break;
-                        }
-
+                    while let Some(r) = Weak::upgrade(&rightest) {
+                        raw = Rc::into_raw(r) as *mut Node<V>;
                         unsafe {
                             (*raw).upper = Weak::upgrade(&new.upper)
                                 .map(|u| Rc::downgrade(&u))
@@ -385,9 +356,9 @@ impl<V: AsBytes> SkipList<V> {
                         }
                     }
 
-                    self.restruct_put(new);
+                    self.restruct_put(Rc::clone(&new));
                 } else {
-                    self.root = Some(Rc::new(Node {
+                    new = Rc::new(Node {
                         key: Rc::new(sig.clone()),
                         value: Rc::new(value),
                         merklesig: sig.clone(),
@@ -395,15 +366,16 @@ impl<V: AsBytes> SkipList<V> {
                         upper: Weak::new(),
                         left: None,
                         right: Weak::new(),
-                    }));
+                    });
+                    self.root = Some(Rc::clone(&new));
                 }
-            }
-            Err(e) => {
-                return Err(e);
-            }
-        };
+                //重塑merkle proof hashsig
+                self.merkle_refresh(new);
 
-        Ok(sig)
+                Ok(sig)
+            }
+            Err(e) => Err(e),
+        }
     }
 
     ///####获取merkle proof
@@ -480,6 +452,191 @@ impl<V: AsBytes> SkipList<V> {
         } else {
             return;
         }
+    }
+
+    //#### 新增节点后，
+    //- 递归向上调整跳表结构，递归至最顶层时，检查是否有需要分裂的超限单元
+    //- 刷新merkle proof hashsig
+    //- should be a tail-recursion
+    fn restruct_put(&mut self, node: Rc<Node<V>>) {
+        if let Some(u) = Weak::upgrade(&node.upper) {
+            //TODO
+            self.restruct_put(u);
+        } else {
+            let unit = Self::self_unit(node);
+            if self.unit_siz == unit.len() {
+                //跳表初始化时，已保证self.unit_siz >= 2
+                let a = Rc::clone(&unit[0]); //等同于self.root.unwrap()
+                let b = Rc::clone(&unit[self.unit_siz / 2]);
+                let root = Rc::new(Node {
+                    key: Rc::clone(&a.key),
+                    value: Rc::clone(&a.value),
+                    merklesig: (self.hash)(&[&a.merklesig, &b.merklesig]),
+                    lower: Some(Rc::clone(&a)),
+                    upper: Weak::new(),
+                    left: None,
+                    right: Weak::new(),
+                });
+
+                let mut raw;
+                raw = Rc::into_raw(a) as *mut Node<V>;
+                unsafe {
+                    (*raw).upper = Rc::downgrade(&root);
+                    Rc::from_raw(raw);
+                }
+                raw = Rc::into_raw(b) as *mut Node<V>;
+                unsafe {
+                    (*raw).upper = Rc::downgrade(&root);
+                    Rc::from_raw(raw);
+                }
+
+                self.root = Some(root);
+                return;
+            }
+        }
+    }
+
+    //#### 删除节点后，
+    //- 递归向上调整跳表结构，递归至最顶层时，检查是否可以降低树高度
+    //- 刷新merkle proof hashsig
+    //- should be a tail-recursion
+    fn restruct_remove(&mut self, node: Rc<Node<V>>) {
+        if let Some(u) = Weak::upgrade(&node.upper) {
+            //TODO
+            self.restruct_remove(u);
+        } else {
+            //顶层除根结点外，还存在其它结点，则不需要降低树高度
+            if Weak::upgrade(&self.root.as_ref().unwrap().right).is_some() {
+                return;
+            }
+
+            let mut root = Rc::clone(&self.root.as_ref().unwrap());
+            while let Some(l) = root.lower.as_ref() {
+                //沿根节点垂直向下的所有节点，其左单元一定为空，无须判断
+                if 1 != Self::self_unit(Rc::clone(l)).len()
+                    || !Self::right_unit(Rc::clone(l)).is_empty()
+                {
+                    root = Rc::clone(l);
+                    break;
+                }
+            }
+
+            //处理新的顶层结元
+            let mut n = Rc::clone(&root);
+            let mut raw = Rc::into_raw(n) as *mut Node<V>;
+            unsafe {
+                (*raw).upper = Weak::new();
+                n = Rc::from_raw(raw);
+            }
+            while let Some(r) = Weak::upgrade(&n.right) {
+                raw = Rc::into_raw(r) as *mut Node<V>;
+                unsafe {
+                    (*raw).upper = Weak::new();
+                    n = Rc::from_raw(raw);
+                }
+            }
+
+            self.root = Some(root);
+            return;
+        }
+    }
+
+    //#### 由下而上递归刷新merkle proof hashsig
+    //- should be a tail-recursion
+    fn merkle_refresh(&self, node: Rc<Node<V>>) {
+        if let Some(mut u) = Weak::upgrade(&node.upper) {
+            let unit = Self::self_unit(node);
+            let sigs = unit
+                .iter()
+                .map(|i| &i.merklesig[..])
+                .collect::<Vec<&[u8]>>();
+            let raw = Rc::into_raw(u) as *mut Node<V>;
+            unsafe {
+                (*raw).merklesig = (self.hash)(&sigs.as_slice());
+                u = Rc::from_raw(raw);
+            }
+
+            self.merkle_refresh(u);
+        } else {
+            return;
+        }
+    }
+
+    //#### 根据给定的节点，统计其自身所在单元及左右相邻单元的节点指针集合
+    fn adjacent_statistics(node: Rc<Node<V>>) -> Adjacency<V> {
+        Adjacency {
+            self_unit: Self::self_unit(Rc::clone(&node)),
+            left_unit: Self::self_unit(Rc::clone(&node)),
+            right_unit: Self::self_unit(node),
+        }
+    }
+
+    //#### self helper for adjacent_statistics
+    fn self_unit(node: Rc<Node<V>>) -> Vec<Rc<Node<V>>> {
+        let mut res = vec![];
+        if let Some(u) = Weak::upgrade(&node.upper) {
+            let mut cur = Rc::clone(u.lower.as_ref().unwrap());
+            res.push(Rc::clone(&cur));
+            while let Some(r) = Weak::upgrade(&cur.right) {
+                if Rc::ptr_eq(&r, Weak::upgrade(&r.upper).unwrap().lower.as_ref().unwrap()) {
+                    break;
+                }
+                res.push(Rc::clone(&r));
+                cur = r;
+            }
+        } else {
+            let mut cur = node;
+            while let Some(l) = cur.left.as_ref() {
+                cur = Rc::clone(l);
+            }
+            while let Some(r) = Weak::upgrade(&cur.right) {
+                res.push(Rc::clone(&r));
+                cur = r;
+            }
+        }
+        res
+    }
+
+    //#### left helper for adjacent_statistics
+    fn left_unit(node: Rc<Node<V>>) -> Vec<Rc<Node<V>>> {
+        let mut res = vec![];
+        if let Some(u) = Weak::upgrade(&node.upper) {
+            if let Some(l) = u.left.as_ref() {
+                let mut cur = Rc::clone(l.lower.as_ref().unwrap());
+                res.push(Rc::clone(&cur));
+                while let Some(r) = Weak::upgrade(&cur.right) {
+                    if Rc::ptr_eq(&r, Weak::upgrade(&r.upper).unwrap().lower.as_ref().unwrap()) {
+                        break;
+                    }
+                    res.push(Rc::clone(&r));
+                    cur = r;
+                }
+            }
+        }
+
+        //无父节点时，说明处于顶层，左右单元均为空
+        res
+    }
+
+    //#### right helper for adjacent_statistics
+    fn right_unit(node: Rc<Node<V>>) -> Vec<Rc<Node<V>>> {
+        let mut res = vec![];
+        if let Some(u) = Weak::upgrade(&node.upper) {
+            if let Some(r) = Weak::upgrade(&u.right) {
+                let mut cur = Rc::clone(r.lower.as_ref().unwrap());
+                res.push(Rc::clone(&cur));
+                while let Some(r) = Weak::upgrade(&cur.right) {
+                    if Rc::ptr_eq(&r, Weak::upgrade(&r.upper).unwrap().lower.as_ref().unwrap()) {
+                        break;
+                    }
+                    res.push(Rc::clone(&r));
+                    cur = r;
+                }
+            }
+        }
+
+        //无父节点时，说明处于顶层，左右单元均为空
+        res
     }
 }
 
