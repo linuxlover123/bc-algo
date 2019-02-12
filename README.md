@@ -18,7 +18,7 @@ cargo doc --open
 
 # Develop In Process
 #### Tree
-> - [ ] [MSL](src/data_structure/tree/msl.rs)(merkle skip list)
+> - [ ] [MSL](src/data_structure/tree/msl)(merkle skip list)
 > - [ ] [RLP](src/data_structure/tree/rlp.rs)(RLP [de]serialize algorithm used in ethereum)
 
 #### Graph

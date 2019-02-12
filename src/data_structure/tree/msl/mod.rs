@@ -452,23 +452,45 @@ impl<V: AsBytes> SkipList<V> {
     }
 
     //#### 新增节点后，
-    //- 递归向上调整跳表结构，递归至最顶层时，检查是否有需要分裂的超限单元
+    //- 递归向上调整跳表结构，递归至最顶层时，检查是否有需要分裂的满员单元
     //- 刷新merkle proof hashsig
     //- should be a tail-recursion
     fn restruct_put(&mut self, node: Rc<Node<V>>) {
-        if let Some(u) = Weak::upgrade(&node.upper) {
-            //TODO
-            self.restruct_put(u);
-        } else {
-            let unit = Self::self_unit(node);
-            if self.unit_siz == unit.len() {
-                //跳表初始化时，已保证self.unit_siz >= 2
-                let a = Rc::clone(&unit[0]); //等同于self.entry.unwrap()
-                let b = Rc::clone(&unit[self.unit_siz / 2]);
+        let unit = Self::self_unit(Rc::clone(&node));
+
+        //跳表初始化时，已保证self.unit_siz >= 2
+        let a = Rc::clone(&unit[0]); //等同于self.entry.unwrap()
+        let b = Rc::clone(&unit[self.unit_siz / 2]);
+
+        //满员则执行单元分裂
+        if self.unit_siz == unit.len() {
+            if let Some(u) = Weak::upgrade(&node.upper) {
+                let new = Rc::new(Node {
+                    key: Rc::clone(&b.key),
+                    value: Rc::clone(&b.value),
+                    merklesig: Box::new([]), //will be refreshed by another function
+                    lower: Some(Rc::clone(&b)),
+                    upper: Weak::upgrade(&u.upper)
+                        .map(|u| Rc::downgrade(&u))
+                        .unwrap_or_default(),
+                    left: Some(Rc::clone(&u)),
+                    right: Weak::upgrade(&u.right)
+                        .map(|r| Rc::downgrade(&r))
+                        .unwrap_or_default(),
+                });
+
+                let raw = Rc::into_raw(u) as *mut Node<V>;
+                unsafe {
+                    (*raw).right = Rc::downgrade(&new);
+                    Rc::from_raw(raw);
+                }
+
+                self.restruct_put(new);
+            } else {
                 let entry = Rc::new(Node {
                     key: Rc::clone(&a.key),
                     value: Rc::clone(&a.value),
-                    merklesig: (self.hash)(&[&a.merklesig, &b.merklesig]),
+                    merklesig: Box::new([]), //will be refreshed by another function
                     lower: Some(Rc::clone(&a)),
                     upper: Weak::new(),
                     left: None,
@@ -488,7 +510,6 @@ impl<V: AsBytes> SkipList<V> {
                 }
 
                 self.entry = Some(entry);
-                return;
             }
         }
     }
