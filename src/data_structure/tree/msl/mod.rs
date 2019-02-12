@@ -28,10 +28,12 @@ type HashSig = Box<[u8]>;
 type HashFunc = Box<dyn Fn(&[&[u8]]) -> HashSig>;
 
 //- @unit_siz: 成员数量超过此值将进行单元分裂
-//- @root: 根节点
+//- @entry: 根节点
 pub struct SkipList<V: AsBytes> {
-    root: Option<Rc<Node<V>>>,
+    entry: Option<Rc<Node<V>>>,
     unit_siz: usize,
+
+    merklesig: HashSig,
 
     merklesig_len: usize,
     hash: HashFunc,
@@ -77,8 +79,9 @@ impl<V: AsBytes> SkipList<V> {
     pub fn init(unit_siz: usize, hash: HashFunc) -> SkipList<V> {
         assert!(unit_siz >= 2);
         SkipList {
-            root: None,
+            entry: None,
             unit_siz,
+            merklesig: Box::new([]),
             merklesig_len: hash(&[&0i32.to_be_bytes()[..]]).len(),
             hash,
         }
@@ -92,8 +95,8 @@ impl<V: AsBytes> SkipList<V> {
 
     ///- #: 全局根哈希
     #[inline(always)]
-    pub fn root_merklesig(&self) -> Option<HashSig> {
-        self.root.as_ref().map(|r| r.merklesig.clone())
+    pub fn entry_merklesig(&self) -> Option<HashSig> {
+        self.entry.as_ref().map(|_| self.merklesig.clone())
     }
 
     //#### 查询数据
@@ -103,12 +106,12 @@ impl<V: AsBytes> SkipList<V> {
         if !self.check_merklesig_len(key) {
             return Err(XErr::HashLen);
         }
-        if self.root.is_none() {
+        if self.entry.is_none() {
             return Err(XErr::NotExists(None));
         }
 
         let mut res = None;
-        Self::get_inner_r(key, Rc::clone(&self.root.as_ref().unwrap()), &mut res);
+        Self::get_inner_r(key, Rc::clone(&self.entry.as_ref().unwrap()), &mut res);
 
         if let Some(n) = res {
             if key == &n.key[..] {
@@ -194,7 +197,7 @@ impl<V: AsBytes> SkipList<V> {
 
         let mut raw;
         if left.is_none() && right.is_none() {
-            self.root = None;
+            self.entry = None;
         } else if left.is_none() && right.is_some() {
             let r = right.unwrap();
             raw = Rc::into_raw(r) as *mut Node<V>;
@@ -293,7 +296,7 @@ impl<V: AsBytes> SkipList<V> {
                         Rc::from_raw(raw);
                     }
                     self.restruct_put(n);
-                } else if let Some(r) = self.root.as_ref() {
+                } else if let Some(r) = self.entry.as_ref() {
                     let mut lowest = Rc::clone(r);
                     while let Some(l) = lowest.lower.as_ref() {
                         lowest = Rc::clone(l);
@@ -341,7 +344,7 @@ impl<V: AsBytes> SkipList<V> {
                         uppest = u;
                     }
 
-                    self.root = Some(newest);
+                    self.entry = Some(newest);
 
                     let mut rightest = Weak::upgrade(&new.right)
                         .map(|r| Rc::downgrade(&r))
@@ -367,7 +370,7 @@ impl<V: AsBytes> SkipList<V> {
                         left: None,
                         right: Weak::new(),
                     });
-                    self.root = Some(Rc::clone(&new));
+                    self.entry = Some(Rc::clone(&new));
                 }
                 //重塑merkle proof hashsig
                 self.merkle_refresh(new);
@@ -382,7 +385,7 @@ impl<V: AsBytes> SkipList<V> {
     ///- #: 若根哈希值与计算出的根哈希相等，返回true
     ///- @key[in]: 查找对象
     pub fn proof(&self, key: &[u8]) -> Result<bool, XErr<V>> {
-        if self.root.is_none() {
+        if self.entry.is_none() {
             return Ok(false);
         }
 
@@ -414,7 +417,7 @@ impl<V: AsBytes> SkipList<V> {
             })
             .unwrap_or_else(|| Box::new([]));
 
-        Ok(self.root.as_ref().unwrap().merklesig == res)
+        Ok(self.merklesig == res)
     }
 
     //#### 获取指定的key存在的merkle路径证明
@@ -431,23 +434,17 @@ impl<V: AsBytes> SkipList<V> {
     //- @cur[in]: 当前节点
     //- @path[out]: 从叶到根的順序写出结果
     fn get_proof_path_r(&self, cur: Rc<Node<V>>, path: &mut Vec<ProofPath>) {
+        let unit = Self::self_unit(Rc::clone(&cur));
+        let sigs = unit
+            .iter()
+            .map(|i| i.merklesig.clone())
+            .collect::<Vec<HashSig>>();
+        path.push(ProofPath {
+            selfidx: sigs.binary_search(&cur.merklesig).unwrap(),
+            merklesigs: sigs,
+        });
+
         if let Some(u) = Weak::upgrade(&cur.upper) {
-            let mut header = Rc::clone(&u.lower.as_ref().unwrap());
-            let mut sigs = vec![header.merklesig.clone()];
-
-            while let Some(n) = Weak::upgrade(&header.right) {
-                if !Rc::ptr_eq(&Weak::upgrade(&n.upper).unwrap(), &u) {
-                    break;
-                }
-                sigs.push(n.merklesig.clone());
-                header = n;
-            }
-
-            path.push(ProofPath {
-                selfidx: sigs.binary_search(&cur.merklesig).unwrap(),
-                merklesigs: sigs,
-            });
-
             self.get_proof_path_r(u, path);
         } else {
             return;
@@ -466,9 +463,9 @@ impl<V: AsBytes> SkipList<V> {
             let unit = Self::self_unit(node);
             if self.unit_siz == unit.len() {
                 //跳表初始化时，已保证self.unit_siz >= 2
-                let a = Rc::clone(&unit[0]); //等同于self.root.unwrap()
+                let a = Rc::clone(&unit[0]); //等同于self.entry.unwrap()
                 let b = Rc::clone(&unit[self.unit_siz / 2]);
-                let root = Rc::new(Node {
+                let entry = Rc::new(Node {
                     key: Rc::clone(&a.key),
                     value: Rc::clone(&a.value),
                     merklesig: (self.hash)(&[&a.merklesig, &b.merklesig]),
@@ -481,16 +478,16 @@ impl<V: AsBytes> SkipList<V> {
                 let mut raw;
                 raw = Rc::into_raw(a) as *mut Node<V>;
                 unsafe {
-                    (*raw).upper = Rc::downgrade(&root);
+                    (*raw).upper = Rc::downgrade(&entry);
                     Rc::from_raw(raw);
                 }
                 raw = Rc::into_raw(b) as *mut Node<V>;
                 unsafe {
-                    (*raw).upper = Rc::downgrade(&root);
+                    (*raw).upper = Rc::downgrade(&entry);
                     Rc::from_raw(raw);
                 }
 
-                self.root = Some(root);
+                self.entry = Some(entry);
                 return;
             }
         }
@@ -506,23 +503,23 @@ impl<V: AsBytes> SkipList<V> {
             self.restruct_remove(u);
         } else {
             //顶层除根结点外，还存在其它结点，则不需要降低树高度
-            if Weak::upgrade(&self.root.as_ref().unwrap().right).is_some() {
+            if Weak::upgrade(&self.entry.as_ref().unwrap().right).is_some() {
                 return;
             }
 
-            let mut root = Rc::clone(&self.root.as_ref().unwrap());
-            while let Some(l) = root.lower.as_ref() {
+            let mut entry = Rc::clone(&self.entry.as_ref().unwrap());
+            while let Some(l) = entry.lower.as_ref() {
                 //沿根节点垂直向下的所有节点，其左单元一定为空，无须判断
                 if 1 != Self::self_unit(Rc::clone(l)).len()
                     || !Self::right_unit(Rc::clone(l)).is_empty()
                 {
-                    root = Rc::clone(l);
+                    entry = Rc::clone(l);
                     break;
                 }
             }
 
             //处理新的顶层结元
-            let mut n = Rc::clone(&root);
+            let mut n = Rc::clone(&entry);
             let mut raw = Rc::into_raw(n) as *mut Node<V>;
             unsafe {
                 (*raw).upper = Weak::new();
@@ -536,20 +533,21 @@ impl<V: AsBytes> SkipList<V> {
                 }
             }
 
-            self.root = Some(root);
+            self.entry = Some(entry);
             return;
         }
     }
 
     //#### 由下而上递归刷新merkle proof hashsig
+    //- 根哈希需要特殊处理
     //- should be a tail-recursion
     fn merkle_refresh(&self, node: Rc<Node<V>>) {
+        let unit = Self::self_unit(Rc::clone(&node));
+        let sigs = unit
+            .iter()
+            .map(|i| &i.merklesig[..])
+            .collect::<Vec<&[u8]>>();
         if let Some(mut u) = Weak::upgrade(&node.upper) {
-            let unit = Self::self_unit(node);
-            let sigs = unit
-                .iter()
-                .map(|i| &i.merklesig[..])
-                .collect::<Vec<&[u8]>>();
             let raw = Rc::into_raw(u) as *mut Node<V>;
             unsafe {
                 (*raw).merklesig = (self.hash)(&sigs.as_slice());
@@ -558,6 +556,12 @@ impl<V: AsBytes> SkipList<V> {
 
             self.merkle_refresh(u);
         } else {
+            let raw = Rc::into_raw(Rc::clone(self.entry.as_ref().unwrap())) as *mut Node<V>;
+            unsafe {
+                (*raw).merklesig = (self.hash)(&sigs.as_slice());
+                Rc::from_raw(raw);
+            }
+
             return;
         }
     }
@@ -719,10 +723,10 @@ mod test {
 
                     assert_eq!(sample.len(), sl.glob_keyset_len());
 
-                    assert!(0 < sl.root_children_len());
-                    assert!(sl.root_children_len() <= sl.glob_keyset_len());
+                    assert!(0 < sl.entry_children_len());
+                    assert!(sl.entry_children_len() <= sl.glob_keyset_len());
 
-                    assert!(!sl.root_hashsig().is_esly());
+                    assert!(!sl.entry_hashsig().is_esly());
                     for (v, h) in sample.iter().zip(hashsigs.iter()) {
                         assert_eq!(v, &sl.get(h).unwrap());
                         assert!(sl.proof(h).unwrap());
