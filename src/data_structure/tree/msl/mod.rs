@@ -96,11 +96,12 @@ impl<V: AsBytes> SkipList<V> {
 
     ///#### 查询数据
     pub fn get(&self, key: &[u8]) -> Option<V> {
-        unimplemented!();
+        self.get_inner(key).map(|n| (*n.value).clone()).ok()
     }
 
     ///#### 删除数据，并按需调整整体的数据结构
     pub fn remove(&self, key: &[u8]) -> Result<Rc<Node<V>>, XErr<V>> {
+        let node = self.get_inner(key)?;
         unimplemented!();
     }
 
