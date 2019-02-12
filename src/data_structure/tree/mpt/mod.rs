@@ -207,7 +207,7 @@ impl<V: AsBytes> MPT<V> {
     }
 
     ///####获取merkle proof
-    ///- #: 计算出的根哈希
+    ///- #: 若根哈希值与计算出的根哈希相等，返回true
     ///- @key[in]: 查找对象
     pub fn proof(&self, key: &[u8]) -> Result<bool, XErr<V>> {
         let path = self.get_proof_path(key)?;

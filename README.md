@@ -18,7 +18,6 @@ cargo doc --open
 
 # Develop In Process
 #### Tree
-> - [ ] [skip list](src/data_structure/tree/skiplist.rs): [v1, 2-step], [v2, N-step]
 > - [ ] [MSL](src/data_structure/tree/msl.rs)(merkle skip list)
 > - [ ] [RLP](src/data_structure/tree/rlp.rs)(RLP [de]serialize algorithm used in ethereum)
 
