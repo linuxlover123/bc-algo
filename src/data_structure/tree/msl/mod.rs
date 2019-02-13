@@ -162,14 +162,14 @@ impl<V: AsBytes> SkipList<V> {
         self.get_inner(key).map(|n| (*n.value).clone()).ok()
     }
 
-    //#### 插入或删除节点后，
-    //- 递归向上调整跳表结构
+    //#### 新增节点后，
+    //- 递归向上调整跳表结构(分裂)
     //- 刷新merkle proof hashsig
     //- should be a tail-recursion
-    fn restruct(&mut self, node: Rc<Node<V>>) {
+    fn restruct_put(&mut self, node: Rc<Node<V>>) {
         if let Some(u) = Weak::upgrade(&node.upper) {
             //TODO
-            self.restruct(u);
+            self.restruct_put(u);
         }
         //已递归至最顶层
         //若顶层成员数量已超过unit_siz，则执行单元分裂
@@ -179,10 +179,80 @@ impl<V: AsBytes> SkipList<V> {
         }
     }
 
-    ///#### 删除数据，并按需调整整体的数据结构
-    pub fn remove(&self, key: &[u8]) -> Result<Rc<Node<V>>, XErr<V>> {
+    //#### 删除节点后，
+    //- 递归向上调整跳表结构(合并)
+    //- 刷新merkle proof hashsig
+    //- should be a tail-recursion
+    fn restruct_remove(&mut self, node: Rc<Node<V>>) {
+        if let Some(u) = Weak::upgrade(&node.upper) {
+            //TODO
+            self.restruct_remove(u);
+        }
+        //已递归至最顶层
+        //若顶层成员数量已超过unit_siz，则执行单元分裂
+        else {
+            //TODO
+            return;
+        }
+    }
+
+    ///#### 删除数据，并按需调整整体的数据结构，若被删节点：
+    ///1. 若左右兄弟皆为空，则说明删除的是节点总数为一的跳表的唯一节点，直接将根节点置空即可
+    ///2. 若左兄弟为空，右兄弟不为空，说明删除的是首节点，只需调整右兄弟指针
+    ///3. 若左兄弟不为空，右兄弟为空，说明删除的是末尾节点，只需调整左兄弟指针
+    ///4. 若左右兄弟皆不为空，需同时调节左右兄弟指针
+    ///5. 2、3、4三种情况，均需检查其是否是其父节点的长子，
+    ///若是，则递归向上删除其所有父辈节点，并新建替代垂直线
+    pub fn remove(&mut self, key: &[u8]) -> Result<Rc<Node<V>>, XErr<V>> {
         let node = self.get_inner(key)?;
-        unimplemented!();
+        let left = if let Some(l) = node.left.as_ref() {
+            Some(Rc::clone(l))
+        } else {
+            None
+        };
+        let right = if let Some(r) = Weak::upgrade(&node.right) {
+            Some(r)
+        } else {
+            None
+        };
+
+        let mut raw;
+        if left.is_none() && right.is_none() {
+            self.root = None;
+        } else if left.is_none() && right.is_some() {
+            let r = right.unwrap();
+            raw = Rc::into_raw(r) as *mut Node<V>;
+            unsafe {
+                (*raw).left = None;
+                Rc::from_raw(raw);
+            }
+        } else if left.is_some() && right.is_none() {
+            let l = left.unwrap();
+            raw = Rc::into_raw(l) as *mut Node<V>;
+            unsafe {
+                (*raw).right = Weak::new();
+                Rc::from_raw(raw);
+            }
+        } else {
+            let mut l = left.unwrap();
+            let r = right.unwrap();
+            raw = Rc::into_raw(l) as *mut Node<V>;
+            unsafe {
+                (*raw).right = Rc::downgrade(&r);
+                l = Rc::from_raw(raw);
+            }
+            raw = Rc::into_raw(r) as *mut Node<V>;
+            unsafe {
+                (*raw).left = Some(l);
+                Rc::from_raw(raw);
+            }
+        }
+
+        //被删除的节点，此时仍然与其原先的左右兄弟相连
+        //直接基于其进行重逆即可
+        self.restruct_remove(Rc::clone(&node));
+
+        Ok(node)
     }
 
     ///#### 插入数据，并按需调整整体的数据结构
@@ -238,7 +308,7 @@ impl<V: AsBytes> SkipList<V> {
                     unsafe {
                         Rc::from_raw(raw);
                     }
-                    self.restruct(n);
+                    self.restruct_put(n);
                 } else if let Some(r) = self.root.as_ref() {
                     let mut lowest = Rc::clone(r);
                     while let Some(l) = lowest.lower.as_ref() {
@@ -268,7 +338,7 @@ impl<V: AsBytes> SkipList<V> {
                         newer = Rc::new(Node {
                             key: Rc::clone(&newest.key),
                             value: Rc::clone(&newest.value),
-                            merklesig: Box::new([]), //将在restruct中刷新
+                            merklesig: Box::new([]), //将在restruct_put中刷新
                             lower: Some(Rc::clone(&newest)),
                             upper: Weak::new(),
                             left: None,
@@ -307,7 +377,7 @@ impl<V: AsBytes> SkipList<V> {
                         }
                     }
 
-                    self.restruct(new);
+                    self.restruct_put(new);
                 } else {
                     self.root = Some(Rc::new(Node {
                         key: Rc::new(sig.clone()),
