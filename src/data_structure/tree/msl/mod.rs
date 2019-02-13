@@ -90,6 +90,9 @@ impl<V: AsBytes> SkipList<V> {
     //- #: 成功返回目标节点指针，
     //失败返回错误原因(其中不存在的情况，返回可插入位置的Option<左兄弟指针>)
     fn get_inner(&self, key: &[u8]) -> Result<Rc<Node<V>>, XErr<V>> {
+        if !self.check_merklesig_len(key) {
+            return Err(XErr::HashLen);
+        }
         if self.root.is_none() {
             return Err(XErr::NotExists(None));
         }
