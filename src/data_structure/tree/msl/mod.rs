@@ -48,6 +48,7 @@ pub struct Node<V: AsBytes> {
     key: Rc<HashSig>,
     value: Rc<V>,
     merklesig: HashSig,
+
     lower: Option<Rc<Node<V>>>,
     upper: Weak<Node<V>>,
     left: Option<Rc<Node<V>>>,
@@ -97,44 +98,116 @@ impl<V: AsBytes> SkipList<V> {
         self.get_inner(key).map(|n| (*n.value).clone()).ok()
     }
 
+    //#### 插入或删除节点后，递归向上调整跳表结构、刷新merkle proof hashsig
+    fn restruct(&mut self, node: Rc<Node<V>>) {
+        unimplemented!();
+    }
+
     ///#### 删除数据，并按需调整整体的数据结构
     pub fn remove(&self, key: &[u8]) -> Result<Rc<Node<V>>, XErr<V>> {
         let node = self.get_inner(key)?;
         unimplemented!();
     }
 
-    //#### 创建新节点
-    fn new_node(&self, key: HashSig, value: V, merklesig: HashSig) -> Node<V> {
-        Node {
-            key: Rc::new((self.hash)(&[&value.as_bytes()[..]])),
-            value: Rc::new(value),
-            merklesig,
-            lower: None,
-            upper: Weak::new(),
-            left: None,
-            right: Weak::new(),
-        }
-    }
-
     ///#### 插入数据，并按需调整整体的数据结构
-    pub fn put(&self, value: V) -> Result<HashSig, XErr<V>> {
-        if self.root.is_none() {
-
-        } else {
-            let sig = self.hash(&[&value.as_bytes()[..]]);
-            match self.get_inner(&sig[..]) {
-                Ok(n) => {
-                    if n.value == &value {
-                        Ok(sig)
-                    } else {
-                        Err(XErr::HashCollision(n))
-                    }
-                }
-                Err(n) => {
-                    //let r = Rc::
+    ///- 目标已存在，且键值均相同，视为成功，否则返回哈希碰撞错误
+    ///- 目标不存在，若存在左兄弟，则在其右侧插入新节点，否则插入为全局第一个元素
+    #[allow(clippy::while_let_loop)]
+    pub fn put(&mut self, value: V) -> Result<HashSig, XErr<V>> {
+        let sig = (self.hash)(&[&value.as_bytes()[..]]);
+        match self.get_inner(&sig[..]) {
+            Ok(n) => {
+                if *n.value != value {
+                    return Err(XErr::HashCollision(n));
                 }
             }
-        }
+            Err(XErr::NotExists(n)) => {
+                if let Some(n) = n {
+                    let raw = Rc::into_raw(Rc::clone(&n)) as *mut Node<V>;
+
+                    if let Some(right) = Weak::upgrade(&n.right) {
+                        unsafe {
+                            (*raw).right = Rc::downgrade(&Rc::new(Node {
+                                key: Rc::new(sig.clone()),
+                                value: Rc::new(value),
+                                merklesig: sig.clone(),
+                                lower: None,
+                                upper: Weak::upgrade(&n.upper)
+                                    .map(|u| Rc::downgrade(&u))
+                                    .unwrap_or_default(),
+                                left: Some(Rc::clone(&n)),
+                                right: Rc::downgrade(&right),
+                            }));
+                        }
+                        let raw = Rc::into_raw(Rc::clone(&right)) as *mut Node<V>;
+                        unsafe {
+                            (*raw).left = Some(right);
+                            Rc::from_raw(raw);
+                        }
+                    } else {
+                        unsafe {
+                            (*raw).right = Rc::downgrade(&Rc::new(Node {
+                                key: Rc::new(sig.clone()),
+                                value: Rc::new(value),
+                                merklesig: sig.clone(),
+                                lower: None,
+                                upper: Weak::upgrade(&n.upper)
+                                    .map(|u| Rc::downgrade(&u))
+                                    .unwrap_or_default(),
+                                left: Some(Rc::clone(&n)),
+                                right: Weak::new(),
+                            }));
+                        }
+                    }
+
+                    unsafe {
+                        Rc::from_raw(raw);
+                    }
+                    self.restruct(n);
+                } else if let Some(mut r) = self.root.as_ref() {
+                    let mut lowest = r;
+                    loop {
+                        if let Some(l) = lowest.lower.as_ref() {
+                            r = l;
+                        } else {
+                            break;
+                        }
+                        lowest = r;
+                    }
+
+                    let raw = Rc::into_raw(Rc::clone(&lowest)) as *mut Node<V>;
+                    unsafe {
+                        (*raw).left = Some(Rc::new(Node {
+                            key: Rc::new(sig.clone()),
+                            value: Rc::new(value),
+                            merklesig: sig.clone(),
+                            lower: None,
+                            upper: Weak::new(),
+                            left: None,
+                            right: Weak::new(),
+                        }));
+                        Rc::from_raw(raw);
+                    }
+                    //TODO
+                    self.restruct(Rc::clone(lowest));
+                } else {
+                    self.root = Some(Rc::new(Node {
+                        key: Rc::new(sig.clone()),
+                        value: Rc::new(value),
+                        merklesig: sig.clone(),
+                        lower: None,
+                        upper: Weak::new(),
+                        left: None,
+                        right: Weak::new(),
+                    }));
+                }
+            }
+            Err(e) => {
+                return Err(e);
+            }
+        };
+
+        Ok(sig)
     }
 
     ///####获取merkle proof
