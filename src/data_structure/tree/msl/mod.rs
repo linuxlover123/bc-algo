@@ -183,7 +183,11 @@ impl<V: AsBytes> SkipList<V> {
     ///5. 2、3、4三种情况，均需检查其是否是其父节点的长子，
     ///若是，则递归向上删除其所有父辈节点，并新建替代垂直线
     pub fn remove(&mut self, key: &[u8]) -> Result<Rc<Node<V>>, XErr<V>> {
-        let node = self.get_inner(key)?;
+        Ok(self.remove_inner(self.get_inner(key)?))
+    }
+
+    //#### same as remove()
+    fn remove_inner(&mut self, node: Rc<Node<V>>) -> Rc<Node<V>> {
         let left = if let Some(l) = node.left.as_ref() {
             Some(Rc::clone(l))
         } else {
@@ -227,14 +231,14 @@ impl<V: AsBytes> SkipList<V> {
             }
         }
 
-        //被删除的节点，此时仍然与其原先的左右兄弟相连
+        //被删除的节点，此时仍然保持其原先的上下左右连接关系
         //直接基于被删节点进行重塑即可
         self.restruct_remove(Rc::clone(&node));
 
         //重塑merkle proof hashsig
         self.merkle_refresh(Rc::clone(&node));
 
-        Ok(node)
+        node
     }
 
     ///#### 插入数据，并按需调整整体的数据结构
@@ -520,21 +524,27 @@ impl<V: AsBytes> SkipList<V> {
     //- should be a tail-recursion
     fn restruct_remove(&mut self, node: Rc<Node<V>>) {
         if let Some(u) = Weak::upgrade(&node.upper) {
-            let mut adj = Self::adjacent_statistics(node);
+            if self.is_first_node(Rc::clone(&node)) {
+                self.remove_inner(Rc::clone(&u));
+                self.restruct_remove(u);
+            }
+
+            let adj = Self::adjacent_statistics(node);
             let standard = self.unit_siz / 2;
+
+            //本单元及其所有非空邻接单元，必然存在父节点
             if standard > adj.self_unit.len() {
-                let obj;
+                let upper;
                 if !adj.left_unit.is_empty() && standard > adj.left_unit.len() {
-                    obj = adj.left_unit.pop().unwrap();
+                    upper = Weak::upgrade(&adj.self_unit[0].right).unwrap();
                 } else if !adj.right_unit.is_empty() && standard > adj.right_unit.len() {
-                    obj = adj.right_unit.drain(..1).last().unwrap();
+                    upper = Weak::upgrade(&adj.right_unit[0].right).unwrap();
                 } else {
                     return;
                 }
 
-                //TODO 清除obj的父节点
-
-                self.restruct_remove(u);
+                self.remove_inner(Rc::clone(&upper));
+                self.restruct_remove(upper);
             }
         } else {
             //顶层除根结点外，还存在其它结点，则不需要降低树高度
@@ -573,6 +583,12 @@ impl<V: AsBytes> SkipList<V> {
         }
     }
 
+    ///#### 基于最底一层对其上各层进行彻底重塑，
+    ///对于长期运行的应用，可在业务闲时调用此函数，优化整体性能
+    pub fn restruct_all(&mut self) {
+        //TODO
+    }
+
     //#### 由下而上递归刷新merkle proof hashsig
     //- 根哈希需要特殊处理
     //- should be a tail-recursion
@@ -605,8 +621,8 @@ impl<V: AsBytes> SkipList<V> {
     fn adjacent_statistics(node: Rc<Node<V>>) -> Adjacency<V> {
         Adjacency {
             self_unit: Self::self_unit(Rc::clone(&node)),
-            left_unit: Self::self_unit(Rc::clone(&node)),
-            right_unit: Self::self_unit(node),
+            left_unit: Self::left_unit(Rc::clone(&node)),
+            right_unit: Self::right_unit(node),
         }
     }
 
@@ -676,6 +692,21 @@ impl<V: AsBytes> SkipList<V> {
 
         //无父节点时，说明处于顶层，左右单元均为空
         res
+    }
+
+    #[inline(always)]
+    fn is_first_node(&self, node: Rc<Node<V>>) -> bool {
+        let entry = if let Some(r) = self.entry.as_ref() {
+            r
+        } else {
+            return false;
+        };
+
+        if let Some(u) = Weak::upgrade(&node.upper) {
+            Rc::ptr_eq(u.lower.as_ref().unwrap(), &node)
+        } else {
+            Rc::ptr_eq(&node, entry)
+        }
     }
 }
 
