@@ -27,7 +27,7 @@ use std::rc::{Rc, Weak};
 type HashSig = Box<[u8]>;
 type HashFunc = Box<dyn Fn(&[&[u8]]) -> HashSig>;
 
-//- @unit_siz: 成员数量超过此值将进行分裂
+//- @unit_siz: 成员数量超过此值将进行单元分裂
 //- @root: 根节点
 pub struct SkipList<V: AsBytes> {
     root: Option<Rc<Node<V>>>,
@@ -64,7 +64,7 @@ impl<V: AsBytes> SkipList<V> {
     }
 
     ///#### 初始化
-    ///- @unit_siz[in]: 元素数量超过此值将进行分裂
+    ///- @unit_siz[in]: 元素数量超过此值将进行单元分裂
     pub fn init(unit_siz: usize, hash: HashFunc) -> SkipList<V> {
         SkipList {
             root: None,
@@ -88,9 +88,70 @@ impl<V: AsBytes> SkipList<V> {
 
     //#### 查询数据
     //- #: 成功返回目标节点指针，
-    //失败返回错误原因(其中不存在的情况，返回可插入位置的左兄弟指针)
+    //失败返回错误原因(其中不存在的情况，返回可插入位置的Option<左兄弟指针>)
     fn get_inner(&self, key: &[u8]) -> Result<Rc<Node<V>>, XErr<V>> {
-        unimplemented!();
+        if self.root.is_none() {
+            return Err(XErr::NotExists(None));
+        }
+
+        let mut res = None;
+        Self::get_inner_r(key, Rc::clone(&self.root.as_ref().unwrap()), &mut res);
+
+        if let Some(n) = res {
+            if key == &n.key[..] {
+                return Ok(n);
+            } else {
+                return Err(XErr::NotExists(Some(n)));
+            }
+        } else {
+            return Err(XErr::NotExists(None));
+        }
+    }
+
+    //- @res[out]: 最终结果写出之地
+    fn get_inner_r(key: &[u8], node: Rc<Node<V>>, res: &mut Option<Rc<Node<V>>>) {
+        let mut cur = node;
+        let mut curkey = &cur.key[..];
+
+        if key > curkey {
+            while let Some(r) = Weak::upgrade(&cur.right) {
+                curkey = &r.key[..];
+                if key == curkey {
+                    *res = Some(r);
+                    return;
+                } else if key < curkey {
+                    if let Some(l) = r.lower.as_ref() {
+                        cur = Rc::clone(l);
+                        break;
+                    } else {
+                        return;
+                    }
+                }
+                cur = Rc::clone(&r);
+            }
+        } else if key < curkey {
+            while let Some(r) = cur.left.as_ref() {
+                curkey = &r.key[..];
+                if key == curkey {
+                    *res = Some(Rc::clone(r));
+                    return;
+                } else if key > curkey {
+                    if let Some(l) = r.lower.as_ref() {
+                        cur = Rc::clone(l);
+                        break;
+                    } else {
+                        return;
+                    }
+                }
+                cur = Rc::clone(&r);
+            }
+        } else {
+            //不可能出现相等的情况，
+            //若相等，在上一层递归中就会结束
+            unreachable!();
+        }
+
+        Self::get_inner_r(key, cur, res);
     }
 
     ///#### 查询数据
@@ -98,9 +159,21 @@ impl<V: AsBytes> SkipList<V> {
         self.get_inner(key).map(|n| (*n.value).clone()).ok()
     }
 
-    //#### 插入或删除节点后，递归向上调整跳表结构、刷新merkle proof hashsig
+    //#### 插入或删除节点后，
+    //- 递归向上调整跳表结构
+    //- 刷新merkle proof hashsig
+    //- should be a tail-recursion
     fn restruct(&mut self, node: Rc<Node<V>>) {
-        unimplemented!();
+        if let Some(u) = Weak::upgrade(&node.upper) {
+            //TODO
+            self.restruct(u);
+        }
+        //已递归至最顶层
+        //若顶层成员数量已超过unit_siz，则执行单元分裂
+        else {
+            //TODO
+            return;
+        }
     }
 
     ///#### 删除数据，并按需调整整体的数据结构
@@ -112,7 +185,6 @@ impl<V: AsBytes> SkipList<V> {
     ///#### 插入数据，并按需调整整体的数据结构
     ///- 目标已存在，且键值均相同，视为成功，否则返回哈希碰撞错误
     ///- 目标不存在，若存在左兄弟，则在其右侧插入新节点，否则插入为全局第一个元素
-    #[allow(clippy::while_let_loop)]
     pub fn put(&mut self, value: V) -> Result<HashSig, XErr<V>> {
         let sig = (self.hash)(&[&value.as_bytes()[..]]);
         match self.get_inner(&sig[..]) {
@@ -164,32 +236,75 @@ impl<V: AsBytes> SkipList<V> {
                         Rc::from_raw(raw);
                     }
                     self.restruct(n);
-                } else if let Some(mut r) = self.root.as_ref() {
-                    let mut lowest = r;
-                    loop {
-                        if let Some(l) = lowest.lower.as_ref() {
-                            r = l;
-                        } else {
-                            break;
-                        }
-                        lowest = r;
+                } else if let Some(r) = self.root.as_ref() {
+                    let mut lowest = Rc::clone(r);
+                    while let Some(l) = lowest.lower.as_ref() {
+                        lowest = Rc::clone(l);
                     }
 
                     let raw = Rc::into_raw(Rc::clone(&lowest)) as *mut Node<V>;
+                    let new = Rc::new(Node {
+                        key: Rc::new(sig.clone()),
+                        value: Rc::new(value),
+                        merklesig: sig.clone(),
+                        lower: None,
+                        upper: Weak::new(),
+                        left: None,
+                        right: Rc::downgrade(&lowest),
+                    });
                     unsafe {
-                        (*raw).left = Some(Rc::new(Node {
-                            key: Rc::new(sig.clone()),
-                            value: Rc::new(value),
-                            merklesig: sig.clone(),
-                            lower: None,
-                            upper: Weak::new(),
-                            left: None,
-                            right: Weak::new(),
-                        }));
+                        (*raw).left = Some(Rc::clone(&new));
                         Rc::from_raw(raw);
                     }
-                    //TODO
-                    self.restruct(Rc::clone(lowest));
+
+                    let mut uppest = lowest;
+                    let mut newest = Rc::clone(&new);
+                    let mut newer;
+                    let mut raw;
+                    while let Some(u) = Weak::upgrade(&uppest.upper) {
+                        newer = Rc::new(Node {
+                            key: Rc::clone(&newest.key),
+                            value: Rc::clone(&newest.value),
+                            merklesig: Box::new([]), //将在restruct中刷新
+                            lower: Some(Rc::clone(&newest)),
+                            upper: Weak::new(),
+                            left: None,
+                            right: Weak::upgrade(&u.right)
+                                .map(|r| Rc::downgrade(&r))
+                                .unwrap_or_default(),
+                        });
+
+                        raw = Rc::into_raw(newest) as *mut Node<V>;
+                        unsafe {
+                            (*raw).upper = Rc::downgrade(&new);
+                            Rc::from_raw(raw);
+                        }
+
+                        newest = newer;
+                        uppest = u;
+                    }
+
+                    self.root = Some(newest);
+
+                    let mut rightest = Weak::upgrade(&new.right)
+                        .map(|r| Rc::downgrade(&r))
+                        .unwrap_or_default();
+                    loop {
+                        if let Some(r) = Weak::upgrade(&rightest) {
+                            raw = Rc::into_raw(r) as *mut Node<V>;
+                        } else {
+                            break;
+                        }
+
+                        unsafe {
+                            (*raw).upper = Weak::upgrade(&new.upper)
+                                .map(|u| Rc::downgrade(&u))
+                                .unwrap_or_default();
+                            rightest = Rc::downgrade(&Rc::from_raw(raw));
+                        }
+                    }
+
+                    self.restruct(new);
                 } else {
                     self.root = Some(Rc::new(Node {
                         key: Rc::new(sig.clone()),
@@ -262,24 +377,17 @@ impl<V: AsBytes> SkipList<V> {
     //#### should be a tail-recursion
     //- @cur[in]: 当前节点
     //- @path[out]: 从叶到根的順序写出结果
-    #[allow(clippy::while_let_loop)]
     fn get_proof_path_r(&self, cur: Rc<Node<V>>, path: &mut Vec<ProofPath>) {
         if let Some(u) = Weak::upgrade(&cur.upper) {
             let mut header = Rc::clone(&u.lower.as_ref().unwrap());
-            let mut tmp;
             let mut sigs = vec![header.merklesig.clone()];
 
-            loop {
-                if let Some(n) = Weak::upgrade(&header.right) {
-                    if !Rc::ptr_eq(&Weak::upgrade(&n.upper).unwrap(), &u) {
-                        break;
-                    }
-                    tmp = n;
-                } else {
+            while let Some(n) = Weak::upgrade(&header.right) {
+                if !Rc::ptr_eq(&Weak::upgrade(&n.upper).unwrap(), &u) {
                     break;
                 }
-                sigs.push(tmp.merklesig.clone());
-                header = tmp;
+                sigs.push(n.merklesig.clone());
+                header = n;
             }
 
             path.push(ProofPath {
