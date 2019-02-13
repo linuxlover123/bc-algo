@@ -55,6 +55,15 @@ pub struct Node<V: AsBytes> {
     right: Weak<Node<V>>,
 }
 
+//- @self_nodes: 自身所在单元的节点集合
+//- @left_nodes: 左邻单元的节点集合
+//- @right_nodes: 右邻单元的节点集合
+struct Adjacency<V: AsBytes> {
+    self_nodes: Vec<Rc<Node<V>>>,
+    left_nodes: Vec<Rc<Node<V>>>,
+    right_nodes: Vec<Rc<Node<V>>>,
+}
+
 impl<V: AsBytes> SkipList<V> {
     pub fn destroy(self) {}
 
@@ -163,37 +172,36 @@ impl<V: AsBytes> SkipList<V> {
     }
 
     //#### 新增节点后，
-    //- 递归向上调整跳表结构(分裂)
+    //- 递归向上调整跳表结构，递归至最顶层时，检查是否有需要分裂的超限单元
     //- 刷新merkle proof hashsig
     //- should be a tail-recursion
     fn restruct_put(&mut self, node: Rc<Node<V>>) {
         if let Some(u) = Weak::upgrade(&node.upper) {
             //TODO
             self.restruct_put(u);
-        }
-        //已递归至最顶层
-        //若顶层成员数量已超过unit_siz，则执行单元分裂
-        else {
+        } else {
             //TODO
             return;
         }
     }
 
     //#### 删除节点后，
-    //- 递归向上调整跳表结构(合并)
+    //- 递归向上调整跳表结构，递归至最顶层时，检查是否有可以合并的相邻单元
     //- 刷新merkle proof hashsig
     //- should be a tail-recursion
     fn restruct_remove(&mut self, node: Rc<Node<V>>) {
         if let Some(u) = Weak::upgrade(&node.upper) {
             //TODO
             self.restruct_remove(u);
-        }
-        //已递归至最顶层
-        //若顶层成员数量已超过unit_siz，则执行单元分裂
-        else {
+        } else {
             //TODO
             return;
         }
+    }
+
+    //#### 根据给定的节点，统计其自身所在单元及左右相邻单元的节点指针集合
+    fn adjacent_statistics(node: Rc<Node<V>>) -> Adjacency<V> {
+        unimplemented!();
     }
 
     ///#### 删除数据，并按需调整整体的数据结构，若被删节点：
@@ -249,7 +257,7 @@ impl<V: AsBytes> SkipList<V> {
         }
 
         //被删除的节点，此时仍然与其原先的左右兄弟相连
-        //直接基于其进行重逆即可
+        //直接基于被删节点进行重塑即可
         self.restruct_remove(Rc::clone(&node));
 
         Ok(node)
