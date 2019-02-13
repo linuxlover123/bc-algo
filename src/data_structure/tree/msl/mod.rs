@@ -520,8 +520,22 @@ impl<V: AsBytes> SkipList<V> {
     //- should be a tail-recursion
     fn restruct_remove(&mut self, node: Rc<Node<V>>) {
         if let Some(u) = Weak::upgrade(&node.upper) {
-            //TODO
-            self.restruct_remove(u);
+            let mut adj = Self::adjacent_statistics(node);
+            let standard = self.unit_siz / 2;
+            if standard > adj.self_unit.len() {
+                let obj;
+                if !adj.left_unit.is_empty() && standard > adj.left_unit.len() {
+                    obj = adj.left_unit.pop().unwrap();
+                } else if !adj.right_unit.is_empty() && standard > adj.right_unit.len() {
+                    obj = adj.right_unit.drain(..1).last().unwrap();
+                } else {
+                    return;
+                }
+
+                //TODO 清除obj的父节点
+
+                self.restruct_remove(u);
+            }
         } else {
             //顶层除根结点外，还存在其它结点，则不需要降低树高度
             if Weak::upgrade(&self.entry.as_ref().unwrap().right).is_some() {
