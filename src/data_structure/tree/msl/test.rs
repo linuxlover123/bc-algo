@@ -44,20 +44,20 @@ macro_rules! source_type_test {
 
             pub fn $name<T: AsBytes>(sample: Vec<T>) {
                 let mut hashsigs = vec![];
-                let mut sl = SkipList::default();
+                let mut msl = SkipList::default();
 
                 for v in sample.iter().cloned() {
-                    hashsigs.push(sl.put(v).unwrap());
+                    hashsigs.push(msl.put(v).unwrap());
                 }
 
-                assert_eq!(sample.len(), sl.item_cnt());
-                assert_eq!(hashsigs.len(), sl.item_cnt());
-                assert_eq!(sl.item_cnt_realtime(), sl.item_cnt());
+                assert_eq!(sample.len(), msl.item_cnt());
+                assert_eq!(hashsigs.len(), msl.item_cnt());
+                assert_eq!(msl.item_cnt_realtime(), msl.item_cnt());
 
-                assert!(sl.root_merklesig().is_some());
+                assert!(msl.root_merklesig().is_some());
                 for (v, h) in sample.iter().zip(hashsigs.iter()) {
-                    assert_eq!(v, &sl.get(h).unwrap());
-                    assert!(sl.proof(h).unwrap());
+                    assert_eq!(v, &msl.get(h).unwrap());
+                    assert!(msl.proof(h).unwrap());
                 }
             }
         }

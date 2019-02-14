@@ -12,21 +12,16 @@
 cargo doc --open
 ```
 
-# Ready For Production
+# Develop For Production
 #### Tree
-> - [x] [MPT](src/data_structure/tree/mpt)(merkle patricia trie)
+> - [ ] [skip list](src/data_structure/tree/skip_list)
+> - [ ] [patricia trie](src/data_structure/tree/patricia_trie)
+> - [ ] [SLPT](src/data_structure/tree/slpt)(Skip List Patricia Trie: suit for memory query of big-data(many GBs, etc.))
+> - [x] [MPT](src/data_structure/tree/mpt)(Merkle Patricia Trie)
+> - [ ] [MSL](src/data_structure/tree/msl)(Merkle Skip List)
 
-# Develop In Process
-#### Tree
-> - [ ] [MSL](src/data_structure/tree/msl)(merkle skip list)
-> - [ ] [RLP](src/data_structure/tree/rlp.rs)(RLP [de]serialize algorithm used in ethereum)
-
-#### Graph
-> - [ ] DAG
-
-#### Bloom Filter
-> - [x] [origin](src/data_structure/bloomfilter/origin.rs)
-> - [x] [partial](src/data_structure/bloomfilter/partial.rs)
+#### SerDe
+> - [ ] [RLP](src/data_structure/tree/rlp)(RLP [de]serialize algorithm used in ethereum)
 
 #### P2P Routing Algorithms
 > - [ ] kademlia
@@ -39,9 +34,12 @@ cargo doc --open
 > - [ ] raft
 
 # Only For Exercise
-#### Linked List
-> - [x] [one-way](src/draft_for_exercise/linkedlist/one_way.rs)
-> - [x] [two-way](src/draft_for_exercise/linkedlist/two_way.rs)
+#### Bloom Filter
+> - [x] [origin](src/data_structure/bloomfilter/origin.rs)
+> - [x] [partial](src/data_structure/bloomfilter/partial.rs)
+
+#### Graph
+> - [ ] DAG
 
 #### Tree
 > - [x] [trie](src/draft_for_exercise/tree/trie.rs)
@@ -52,6 +50,10 @@ cargo doc --open
 > - [ ] B+
 > - [ ] red-black tree
 > - [ ] AVL
+
+#### Linked List
+> - [x] [one-way](src/draft_for_exercise/linkedlist/one_way.rs)
+> - [x] [two-way](src/draft_for_exercise/linkedlist/two_way.rs)
 
 #### Optimize algorithm using mathematical theorems
 > - [ ] 数学定理

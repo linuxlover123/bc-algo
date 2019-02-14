@@ -23,21 +23,21 @@
 //!        sample.sort();
 //!        sample.dedup();
 //!
-//!        let mut sl = SkipList::default();
+//!        let mut msl = MSL::default();
 //!        let mut hashsigs = vec![];
 //!
 //!        for v in sample.iter().cloned() {
-//!            hashsigs.push(sl.put(v).unwrap());
+//!            hashsigs.push(msl.put(v).unwrap());
 //!        }
 //!
-//!        assert_eq!(sample.len(), sl.item_cnt());
-//!        assert_eq!(hashsigs.len(), sl.item_cnt());
-//!        assert_eq!(sl.item_cnt_realtime(), sl.item_cnt());
+//!        assert_eq!(sample.len(), msl.item_cnt());
+//!        assert_eq!(hashsigs.len(), msl.item_cnt());
+//!        assert_eq!(msl.item_cnt_realtime(), msl.item_cnt());
 //!
-//!        assert!(sl.root_merklesig().is_some());
+//!        assert!(msl.root_merklesig().is_some());
 //!        for (v, h) in sample.iter().zip(hashsigs.iter()) {
-//!            assert_eq!(v, &sl.get(h).unwrap());
-//!            assert!(sl.proof(h).unwrap());
+//!            assert_eq!(v, &msl.get(h).unwrap());
+//!            assert!(msl.proof(h).unwrap());
 //!        }
 //!    }
 //!```
@@ -55,7 +55,7 @@ use std::rc::{Rc, Weak};
 type HashSig = Rc<Box<[u8]>>;
 type HashFunc = Box<dyn Fn(&[&[u8]]) -> HashSig>;
 
-pub struct SkipList<V: AsBytes> {
+pub struct MSL<V: AsBytes> {
     /*以下三项为静态属性*/
     unit_maxsiz: usize,   //成员数量超过此值将进行单元分裂
     merklesig_len: usize, //哈希结果的字节长度
@@ -85,14 +85,14 @@ pub struct Node<V: AsBytes> {
     right: Option<Rc<Node<V>>>, //右侧节点(一对一)
 }
 
-impl<V: AsBytes> SkipList<V> {
+impl<V: AsBytes> MSL<V> {
     ///#### 初始化
     ///- @unit_maxsiz[in]: 必须是不小于2的整数，元素数量超过此值将进行单元分裂
     ///- @hash[in]: 用于计算哈希值的函数指针
     #[inline(always)]
-    pub fn init(unit_maxsiz: usize, hash: HashFunc) -> SkipList<V> {
+    pub fn init(unit_maxsiz: usize, hash: HashFunc) -> MSL<V> {
         assert!(unit_maxsiz >= 2);
-        SkipList {
+        MSL {
             root: None,
             unit_maxsiz,
             merklesig_len: hash(&[&0i32.to_be_bytes()[..]]).len(),
@@ -104,8 +104,8 @@ impl<V: AsBytes> SkipList<V> {
 
     ///#### 以默认配置初始化
     #[inline(always)]
-    pub fn default() -> SkipList<V> {
-        SkipList::init(8, Box::new(sha256))
+    pub fn default() -> MSL<V> {
+        MSL::init(8, Box::new(sha256))
     }
 
     ///#### 销毁
@@ -365,7 +365,7 @@ struct Adjacency<V: AsBytes> {
     right_unit: Vec<Rc<Node<V>>>,
 }
 
-impl<V: AsBytes> SkipList<V> {
+impl<V: AsBytes> MSL<V> {
     //#### 检查输入的merklesig字节长度是否合法
     #[inline(always)]
     fn check_merklesig_len(&self, hashsig: &[u8]) -> bool {
