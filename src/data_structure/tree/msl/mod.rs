@@ -586,7 +586,140 @@ impl<V: AsBytes> SkipList<V> {
     ///#### 基于最底一层对其上各层进行彻底重塑，
     ///对于长期运行的应用，可在业务闲时调用此函数，优化整体性能
     pub fn restruct_all(&mut self) {
-        //TODO
+        if let Some(lowest) = self.get_lowest_first_node() {
+            let mut optim_siz = self.unit_siz / 2;
+            if optim_siz < 2 {
+                optim_siz = 2;
+            }
+
+            let mut sigbuf = Vec::with_capacity(optim_siz);
+            self.restruct_all_inner(lowest, optim_siz, &mut sigbuf);
+        }
+    }
+
+    //#### same as restruct_all()
+    //- should be a tail-recursion
+    fn restruct_all_inner(
+        &mut self,
+        head: Rc<Node<V>>,
+        optim_siz: usize,
+        sigbuf: &mut Vec<HashSig>,
+    ) {
+        let mut raw;
+        let mut new;
+        let mut node;
+        let mut i = 0;
+        let mut upper_len = 0;
+
+        //处理上层的首节点
+        node = head;
+        sigbuf.push(node.merklesig.clone());
+        i += 1;
+        let upper_head = Rc::new(Node {
+            key: Rc::clone(&node.key),
+            value: Rc::clone(&node.value),
+            merklesig: Box::new([]),
+            lower: Some(Rc::clone(&node)),
+            upper: Weak::new(),
+            left: None,
+            right: Weak::new(),
+        });
+        let mut upper_tail = Rc::clone(&upper_head);
+        upper_len += 1;
+
+        raw = Rc::into_raw(node) as *mut Node<V>;
+        unsafe {
+            (*raw).upper = Rc::downgrade(&upper_tail);
+            node = Rc::from_raw(raw);
+        }
+
+        //从左到右处理后续节点(若有)
+        while let Some(r) = Weak::upgrade(&node.right) {
+            node = r;
+            sigbuf.push(node.merklesig.clone());
+            i += 1;
+
+            //添加上层节点
+            if 1 == i {
+                new = Rc::new(Node {
+                    key: Rc::clone(&node.key),
+                    value: Rc::clone(&node.value),
+                    merklesig: Box::new([]),
+                    lower: Some(Rc::clone(&node)),
+                    upper: Weak::new(),
+                    left: Some(Rc::clone(&upper_tail)),
+                    right: Weak::new(),
+                });
+                upper_tail = Rc::clone(&new);
+                upper_len += 1;
+            }
+
+            //更改本层节点的upper指针
+            raw = Rc::into_raw(node) as *mut Node<V>;
+            unsafe {
+                (*raw).upper = Rc::downgrade(&upper_tail);
+                node = Rc::from_raw(raw);
+            }
+
+            //为上层节点计算merkle hashsig
+            if optim_siz == i {
+                i = 0;
+                raw = Rc::into_raw(upper_tail) as *mut Node<V>;
+                unsafe {
+                    (*raw).merklesig =
+                        (self.hash)(&sigbuf.iter().map(|i| &i[..]).collect::<Vec<&[u8]>>()[..]);
+                    upper_tail = Rc::from_raw(raw);
+                }
+                sigbuf.clear();
+            }
+        }
+
+        //处理最后一个单元的merkle hashsig
+        if 0 != i {
+            raw = Rc::into_raw(upper_tail) as *mut Node<V>;
+            unsafe {
+                (*raw).merklesig =
+                    (self.hash)(&sigbuf.iter().map(|i| &i[..]).collect::<Vec<&[u8]>>()[..]);
+                Rc::from_raw(raw);
+            }
+            sigbuf.clear();
+        }
+
+        if upper_len < self.unit_siz {
+            self.entry = Some(upper_head);
+            return;
+        } else {
+            self.restruct_all_inner(upper_head, optim_siz, sigbuf);
+        }
+    }
+
+    //获取最底一层的首节点
+    fn get_lowest_first_node(&self) -> Option<Rc<Node<V>>> {
+        let mut entry = Rc::clone(self.entry.as_ref()?);
+        while let Some(l) = entry.lower.as_ref() {
+            entry = Rc::clone(l);
+        }
+        Some(entry)
+    }
+
+    ///#### 获取跳表的树高度
+    pub fn height(&self) -> usize {
+        let mut height = 0usize;
+        if let Some(entry) = self.entry.as_ref() {
+            height += 1;
+            let mut entry = Rc::clone(entry);
+            while let Some(l) = entry.lower.as_ref() {
+                height += 1;
+                entry = Rc::clone(l);
+            }
+        }
+
+        height
+    }
+
+    ///#### 获取跳表的单元容量
+    pub fn unit_siz(&self) -> usize {
+        self.unit_siz
     }
 
     //#### 由下而上递归刷新merkle proof hashsig
