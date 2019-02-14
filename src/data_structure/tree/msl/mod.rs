@@ -27,12 +27,17 @@ use std::rc::{Rc, Weak};
 type HashSig = Box<[u8]>;
 type HashFunc = Box<dyn Fn(&[&[u8]]) -> HashSig>;
 
-///- @unit_siz: 成员数量超过此值将进行单元分裂
 ///- @entry: 根节点
+///- @unit_siz: 成员数量超过此值将进行单元分裂
+///- @merklesig: 根哈希值
+///- @item_cnt: 最底一层的节点数，即全局元素数量
+///- @merklesig_len: 哈希结果的字节长度
+///- @hash: 所使用的哈希函数指针
 pub struct SkipList<V: AsBytes> {
     entry: Option<Rc<Node<V>>>,
     unit_siz: usize,
 
+    item_cnt: usize,
     merklesig: HashSig,
 
     merklesig_len: usize,
@@ -70,17 +75,20 @@ impl<V: AsBytes> SkipList<V> {
     pub fn destroy(self) {}
 
     ///#### 以默认配置初始化
+    #[inline(always)]
     pub fn default() -> SkipList<V> {
         SkipList::init(8, Box::new(sha256))
     }
 
     ///#### 初始化
     ///- @unit_siz[in]: 元素数量超过此值将进行单元分裂
+    #[inline(always)]
     pub fn init(unit_siz: usize, hash: HashFunc) -> SkipList<V> {
         assert!(unit_siz >= 2);
         SkipList {
             entry: None,
             unit_siz,
+            item_cnt: 0,
             merklesig: Box::new([]),
             merklesig_len: hash(&[&0i32.to_be_bytes()[..]]).len(),
             hash,
@@ -97,6 +105,34 @@ impl<V: AsBytes> SkipList<V> {
     #[inline(always)]
     pub fn entry_merklesig(&self) -> Option<HashSig> {
         self.entry.as_ref().map(|_| self.merklesig.clone())
+    }
+
+    ///#### 获取跳表的树高度
+    #[inline(always)]
+    pub fn height(&self) -> usize {
+        let mut height = 0usize;
+        if let Some(entry) = self.entry.as_ref() {
+            height += 1;
+            let mut entry = Rc::clone(entry);
+            while let Some(l) = entry.lower.as_ref() {
+                height += 1;
+                entry = Rc::clone(l);
+            }
+        }
+
+        height
+    }
+
+    ///#### 获取跳表的单元容量
+    #[inline(always)]
+    pub fn unit_siz(&self) -> usize {
+        self.unit_siz
+    }
+
+    ///#### 获取跳表中所有元素的数量
+    #[inline(always)]
+    pub fn item_cnt(&self) -> usize {
+        self.item_cnt
     }
 
     //#### 查询数据
@@ -124,47 +160,63 @@ impl<V: AsBytes> SkipList<V> {
         }
     }
 
+    //#### should be a tail-recursion
     //- @res[out]: 最终结果写出之地
     fn get_inner_r(key: &[u8], node: Rc<Node<V>>, res: &mut Option<Rc<Node<V>>>) {
         let mut cur = node;
         let mut curkey = &cur.key[..];
 
-        if key > curkey {
-            while let Some(r) = Weak::upgrade(&cur.right) {
-                curkey = &r.key[..];
-                if key == curkey {
-                    *res = Some(r);
-                    return;
-                } else if key < curkey {
-                    if let Some(l) = r.lower.as_ref() {
-                        cur = Rc::clone(l);
-                        break;
-                    } else {
+        if key == curkey {
+            *res = Some(cur);
+            return;
+        } else if key > curkey {
+            'm: loop {
+                while let Some(right) = Weak::upgrade(&cur.right) {
+                    cur = right;
+                    curkey = &cur.key[..];
+                    if key == curkey {
+                        *res = Some(cur);
                         return;
+                    } else if key < curkey {
+                        if let Some(lower) = cur.lower.as_ref() {
+                            cur = Rc::clone(lower);
+                            break 'm;
+                        } else {
+                            return;
+                        }
                     }
                 }
-                cur = Rc::clone(&r);
-            }
-        } else if key < curkey {
-            while let Some(r) = cur.left.as_ref() {
-                curkey = &r.key[..];
-                if key == curkey {
-                    *res = Some(Rc::clone(r));
+
+                //比当前层的所有元素都大
+                if let Some(lower) = cur.lower.as_ref() {
+                    cur = Rc::clone(lower);
+                    break;
+                } else {
                     return;
-                } else if key > curkey {
-                    if let Some(l) = r.lower.as_ref() {
-                        cur = Rc::clone(l);
-                        break;
-                    } else {
-                        return;
-                    }
                 }
-                cur = Rc::clone(&r);
             }
         } else {
-            //不可能出现相等的情况，
-            //若相等，在上一层递归中就会结束
-            unreachable!();
+            'n: loop {
+                while let Some(left) = cur.left.as_ref() {
+                    cur = Rc::clone(left);
+                    curkey = &cur.key[..];
+                    if key == curkey {
+                        *res = Some(cur);
+                        return;
+                    } else if key > curkey {
+                        if let Some(lower) = cur.lower.as_ref() {
+                            cur = Rc::clone(lower);
+                            break 'n;
+                        } else {
+                            return;
+                        }
+                    }
+                }
+
+                //比当前层的所有元素都小，由于所有层级的第一个节点都是相同的，
+                //故此种情况即是查询失败，不需要进一步判断
+                return;
+            }
         }
 
         Self::get_inner_r(key, cur, res);
@@ -238,6 +290,7 @@ impl<V: AsBytes> SkipList<V> {
         //重塑merkle proof hashsig
         self.merkle_refresh(Rc::clone(&node));
 
+        self.item_cnt -= 1;
         node
     }
 
@@ -379,6 +432,7 @@ impl<V: AsBytes> SkipList<V> {
                 //重塑merkle proof hashsig
                 self.merkle_refresh(new);
 
+                self.item_cnt += 1;
                 Ok(sig)
             }
             Err(e) => Err(e),
@@ -704,26 +758,6 @@ impl<V: AsBytes> SkipList<V> {
         Some(entry)
     }
 
-    ///#### 获取跳表的树高度
-    pub fn height(&self) -> usize {
-        let mut height = 0usize;
-        if let Some(entry) = self.entry.as_ref() {
-            height += 1;
-            let mut entry = Rc::clone(entry);
-            while let Some(l) = entry.lower.as_ref() {
-                height += 1;
-                entry = Rc::clone(l);
-            }
-        }
-
-        height
-    }
-
-    ///#### 获取跳表的单元容量
-    pub fn unit_siz(&self) -> usize {
-        self.unit_siz
-    }
-
     //#### 由下而上递归刷新merkle proof hashsig
     //- 根哈希需要特殊处理
     //- should be a tail-recursion
@@ -922,12 +956,9 @@ mod test {
                         hashsigs.push(sl.put(v).unwrap());
                     }
 
-                    assert_eq!(sample.len(), sl.glob_keyset_len());
+                    assert_eq!(sample.len(), sl.item_cnt());
 
-                    assert!(0 < sl.entry_children_len());
-                    assert!(sl.entry_children_len() <= sl.glob_keyset_len());
-
-                    assert!(!sl.entry_hashsig().is_esly());
+                    assert!(sl.entry_merklesig().is_some());
                     for (v, h) in sample.iter().zip(hashsigs.iter()) {
                         assert_eq!(v, &sl.get(h).unwrap());
                         assert!(sl.proof(h).unwrap());
@@ -948,17 +979,17 @@ mod test {
         };
     }
 
-    source_type_test!(_char, char);
-    source_type_test!(_u8, u8);
-    source_type_test!(_u16, u16);
-    source_type_test!(_u32, u32);
-    source_type_test!(_u64, u64);
-    source_type_test!(_u128, u128);
-    source_type_test!(_usize, usize);
-    source_type_test!(_i8, i8);
-    source_type_test!(_i16, i16);
-    source_type_test!(_i32, i32);
-    source_type_test!(_i64, i64);
-    source_type_test!(_i128, i128);
-    source_type_test!(_isize, isize);
+    source_type_test!(msl_char, char);
+    source_type_test!(msl_u8, u8);
+    source_type_test!(msl_u16, u16);
+    source_type_test!(msl_u32, u32);
+    source_type_test!(msl_u64, u64);
+    source_type_test!(msl_u128, u128);
+    source_type_test!(msl_usize, usize);
+    source_type_test!(msl_i8, i8);
+    source_type_test!(msl_i16, i16);
+    source_type_test!(msl_i32, i32);
+    source_type_test!(msl_i64, i64);
+    source_type_test!(msl_i128, i128);
+    source_type_test!(msl_isize, isize);
 }

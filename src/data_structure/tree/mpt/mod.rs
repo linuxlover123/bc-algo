@@ -543,17 +543,17 @@ mod test {
         };
     }
 
-    source_type_test!(_char, char);
-    source_type_test!(_u8, u8);
-    source_type_test!(_u16, u16);
-    source_type_test!(_u32, u32);
-    source_type_test!(_u64, u64);
-    source_type_test!(_u128, u128);
-    source_type_test!(_usize, usize);
-    source_type_test!(_i8, i8);
-    source_type_test!(_i16, i16);
-    source_type_test!(_i32, i32);
-    source_type_test!(_i64, i64);
-    source_type_test!(_i128, i128);
-    source_type_test!(_isize, isize);
+    source_type_test!(mpt_char, char);
+    source_type_test!(mpt_u8, u8);
+    source_type_test!(mpt_u16, u16);
+    source_type_test!(mpt_u32, u32);
+    source_type_test!(mpt_u64, u64);
+    source_type_test!(mpt_u128, u128);
+    source_type_test!(mpt_usize, usize);
+    source_type_test!(mpt_i8, i8);
+    source_type_test!(mpt_i16, i16);
+    source_type_test!(mpt_i32, i32);
+    source_type_test!(mpt_i64, i64);
+    source_type_test!(mpt_i128, i128);
+    source_type_test!(mpt_isize, isize);
 }
