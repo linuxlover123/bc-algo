@@ -27,8 +27,8 @@ use std::rc::{Rc, Weak};
 type HashSig = Box<[u8]>;
 type HashFunc = Box<dyn Fn(&[&[u8]]) -> HashSig>;
 
-//- @unit_siz: 成员数量超过此值将进行单元分裂
-//- @entry: 根节点
+///- @unit_siz: 成员数量超过此值将进行单元分裂
+///- @entry: 根节点
 pub struct SkipList<V: AsBytes> {
     entry: Option<Rc<Node<V>>>,
     unit_siz: usize,
@@ -39,13 +39,13 @@ pub struct SkipList<V: AsBytes> {
     hash: HashFunc,
 }
 
-//- @key: 用于索引的键，由HashFunc(V)得到
-//- @value: 被索引的目标
-//- @merklesig: 各节点的merkle路径哈希值
-//- @lower: 下侧节点(一对一，只存储下层的第一个节点)
-//- @upper: 上侧节点(多对一)
-//- @left: 左侧节点(一对一)
-//- @right: 右侧节点(一对一)
+///- @key: 用于索引的键，由HashFunc(V)得到
+///- @value: 被索引的目标
+///- @merklesig: 各节点的merkle路径哈希值
+///- @lower: 下侧节点(一对一，只存储下层的第一个节点)
+///- @upper: 上侧节点(多对一)
+///- @left: 左侧节点(一对一)
+///- @right: 右侧节点(一对一)
 pub struct Node<V: AsBytes> {
     key: Rc<HashSig>,
     value: Rc<V>,
@@ -385,7 +385,7 @@ impl<V: AsBytes> SkipList<V> {
         }
     }
 
-    ///####获取merkle proof
+    ///#### 获取merkle proof
     ///- #: 若根哈希值与计算出的根哈希相等，返回true
     ///- @key[in]: 查找对象
     pub fn proof(&self, key: &[u8]) -> Result<bool, XErr<V>> {
@@ -584,7 +584,7 @@ impl<V: AsBytes> SkipList<V> {
     }
 
     ///#### 基于最底一层对其上各层进行彻底重塑，
-    ///对于长期运行的应用，可在业务闲时调用此函数，优化整体性能
+    ///- 对于长期运行的应用，可在业务闲时调用此函数，优化整体性能
     pub fn restruct_all(&mut self) {
         if let Some(lowest) = self.get_lowest_first_node() {
             let mut optim_siz = self.unit_siz / 2;
@@ -597,8 +597,10 @@ impl<V: AsBytes> SkipList<V> {
         }
     }
 
-    //#### same as restruct_all()
-    //- should be a tail-recursion
+    //#### should be a tail-recursion
+    //- @head[in]: 每一层的首节点
+    //- @optim_siz[in]: 优化的目标单元大小
+    //- @sigbug[in]: 缓存区复用
     fn restruct_all_inner(
         &mut self,
         head: Rc<Node<V>>,
@@ -845,7 +847,7 @@ impl<V: AsBytes> SkipList<V> {
 
 //- @selfidx: 路径上的每个节点在所有兄弟节点中的索引
 //- @merklesigs: 当前节点及其所有兄弟节点的哈希值的有序集合
-pub struct ProofPath {
+struct ProofPath {
     selfidx: usize,
     merklesigs: Vec<HashSig>,
 }
