@@ -34,7 +34,7 @@
 //!        assert_eq!(hashsigs.len(), msl.item_cnt());
 //!        assert_eq!(msl.item_cnt_realtime(), msl.item_cnt());
 //!
-//!        assert!(msl.root_merklesig().is_some());
+//!        assert!(msl.merklesig().is_some());
 //!        for (v, h) in sample.iter().zip(hashsigs.iter()) {
 //!            assert_eq!(v, &msl.get(h).unwrap());
 //!            assert!(msl.proof(h).unwrap());
@@ -111,7 +111,7 @@ impl<V: AsBytes> MSL<V> {
     ///#### 销毁
     pub fn destroy(self) {}
 
-    ///#### 获取跳表的单元容量
+    ///#### 获取单元容量
     #[inline(always)]
     pub fn unit_maxsiz(&self) -> usize {
         self.unit_maxsiz
@@ -119,7 +119,7 @@ impl<V: AsBytes> MSL<V> {
 
     ///- #: 全局根哈希
     #[inline(always)]
-    pub fn root_merklesig(&self) -> Option<HashSig> {
+    pub fn merklesig(&self) -> Option<HashSig> {
         self.merklesig.clone()
     }
 
