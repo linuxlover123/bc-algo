@@ -1,4 +1,4 @@
-//! ## Routing Skip List
+//! ## Routing Cross List
 //!
 //! #### 算法说明
 //! - suit for memory query of big-data(many GBs, etc.),
@@ -15,7 +15,7 @@
 //! - <font color=Green>√</font> 多线程安全
 //! - <font color=Red>×</font> 无 unsafe 代码
 
-//use crate::skip_list;
+//use crate::cross_list;
 
 #[cfg(test)]
 mod test {

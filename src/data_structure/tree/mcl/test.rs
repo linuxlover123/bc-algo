@@ -44,7 +44,7 @@ macro_rules! source_type_test {
 
             pub fn $name<T: AsBytes>(sample: Vec<T>) {
                 let mut hashsigs = vec![];
-                let mut msl = SkipList::default();
+                let mut msl = CrossList::default();
 
                 for v in sample.iter().cloned() {
                     hashsigs.push(msl.put(v).unwrap());

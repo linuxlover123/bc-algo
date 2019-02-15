@@ -1,4 +1,4 @@
-//! ## (Merkle)Skip List
+//! ## (Merkle)Cross List
 //!
 //! #### 算法说明
 //! - 读写效率与AVL、红黑树等相当；

@@ -1,4 +1,4 @@
-//! ## Routing Skip List Partricia Trie
+//! ## Routing Cross List Partricia Trie
 //!
 //! #### 算法说明
 //! - suit for memory query of big-data(many GBs, etc.) with long key(string/Vec/Box/...etc.))
@@ -15,7 +15,7 @@
 //! - <font color=Red>×</font> 无 unsafe 代码
 
 //use crate::partricia_trie;
-//use crate::skip_list;
+//use crate::cross_list;
 
 #[cfg(test)]
 mod test {
