@@ -1,4 +1,4 @@
-//! ## Routing Cross List
+//! ## Sharding Cross List
 //!
 //! #### 算法说明
 //! - suit for memory query of big-data(many GBs, etc.),

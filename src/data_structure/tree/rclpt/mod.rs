@@ -1,4 +1,4 @@
-//! ## Routing Cross List Partricia Trie
+//! ## Sharding Cross List Partricia Trie
 //!
 //! #### 算法说明
 //! - suit for memory query of big-data(many GBs, etc.) with long key(string/Vec/Box/...etc.))
