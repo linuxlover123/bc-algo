@@ -1,9 +1,10 @@
-//! ## Skip List Partricia Trie
+//! ## Routing Skip List Partricia Trie
 //!
 //! #### 算法说明
+//! - suit for memory query of big-data(many GBs, etc.) with long key(string/Vec/Box/...etc.))
 //! - 用于解决大型有序数据不适合使用线性结构存储(增删时需要大量移动元素)；
-//! - 对外接口表现为Partricia Trie；
-//! - 内部每一层数据使用跳表管理；
+//! - 首先使用byte_routing()进行路由分区；
+//! - 之后使用Partricia Trie在分区内对key进行分段搜索，每一段的所在的数据层，使用跳表管理；
 //! - 综合查询效率高于lg(_2)(^n)。
 //!
 //! #### 应用场景
@@ -17,6 +18,6 @@
 //use crate::skip_list;
 
 #[cfg(test)]
-mod test{
+mod test {
     //TODO
 }

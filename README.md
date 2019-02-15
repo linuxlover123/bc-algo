@@ -16,7 +16,10 @@ cargo doc --open
 #### Tree
 > - [ ] [skip list](src/data_structure/tree/skip_list)
 > - [ ] [patricia trie](src/data_structure/tree/patricia_trie)
-> - [ ] [SLPT](src/data_structure/tree/slpt)(Skip List Patricia Trie: suit for memory query of big-data(many GBs, etc.))
+> - [ ] [RSL](src/data_structure/tree/rsl)(Routing Skip-List:
+suit for memory query of big-data(many GBs, etc.), with short key(usually primary-type: i32/usize/u128/...etc.))
+> - [ ] [RSLPT](src/data_structure/tree/rslpt)(Routing Skip-List Patricia-Trie:
+suit for memory query of big-data(many GBs, etc.) with long key(string/Vec/Box/...etc.))
 > - [x] [MPT](src/data_structure/tree/mpt)(Merkle Patricia Trie)
 > - [ ] [MSL](src/data_structure/tree/msl)(Merkle Skip List)
 
