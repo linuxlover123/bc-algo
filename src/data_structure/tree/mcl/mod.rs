@@ -23,7 +23,7 @@
 //!        sample.sort();
 //!        sample.dedup();
 //!
-//!        let mut msl = MSL::default();
+//!        let mut msl = MCL::default();
 //!        let mut hashsigs = vec![];
 //!
 //!        for v in sample.iter().cloned() {
@@ -55,14 +55,14 @@ use std::rc::{Rc, Weak};
 type HashSig = Rc<Box<[u8]>>;
 type HashFunc = Box<dyn Fn(&[&[u8]]) -> HashSig>;
 
-pub struct MSL<V: AsBytes> {
+pub struct MCL<V: AsBytes> {
     /*以下三项为静态属性*/
     unit_maxsiz: usize,   //成员数量超过此值将进行单元分裂
     merklesig_len: usize, //哈希结果的字节长度
     hash: HashFunc,       //所使用的哈希函数指针
 
     /*以下两项动态属性*/
-    merklesig: Option<HashSig>, //跳表全局根哈希值(注：不是根结节的merkle hashsig)
+    merklesig: Option<HashSig>, //链表全局根哈希值(注：不是根结节的merkle hashsig)
     item_cnt: usize,            //最底一层的节点数，即全局元素数量
 
     root: Option<Rc<Node<V>>>, //根结节，顶层的首节点(注：此结节的merkle hashsig不是全局根哈希！)
@@ -85,14 +85,14 @@ pub struct Node<V: AsBytes> {
     right: Option<Rc<Node<V>>>, //右侧节点(一对一)
 }
 
-impl<V: AsBytes> MSL<V> {
+impl<V: AsBytes> MCL<V> {
     ///#### 初始化
     ///- @unit_maxsiz[in]: 必须是不小于2的整数，元素数量超过此值将进行单元分裂
     ///- @hash[in]: 用于计算哈希值的函数指针
     #[inline(always)]
-    pub fn init(unit_maxsiz: usize, hash: HashFunc) -> MSL<V> {
+    pub fn init(unit_maxsiz: usize, hash: HashFunc) -> MCL<V> {
         assert!(unit_maxsiz >= 2);
-        MSL {
+        MCL {
             root: None,
             unit_maxsiz,
             merklesig_len: hash(&[&0i32.to_be_bytes()[..]]).len(),
@@ -104,8 +104,8 @@ impl<V: AsBytes> MSL<V> {
 
     ///#### 以默认配置初始化
     #[inline(always)]
-    pub fn default() -> MSL<V> {
-        MSL::init(8, Box::new(sha256))
+    pub fn default() -> MCL<V> {
+        MCL::init(8, Box::new(sha256))
     }
 
     ///#### 销毁
@@ -123,13 +123,13 @@ impl<V: AsBytes> MSL<V> {
         self.merklesig.clone()
     }
 
-    ///#### 获取跳表中所有元素的数量
+    ///#### 获取链表中所有元素的数量
     #[inline(always)]
     pub fn item_cnt(&self) -> usize {
         self.item_cnt
     }
 
-    ///#### 获取跳表的树高度
+    ///#### 获取链表的树高度
     #[inline(always)]
     pub fn height(&self) -> usize {
         let mut height = 0usize;
@@ -151,17 +151,20 @@ impl<V: AsBytes> MSL<V> {
         self.get_inner(key).map(|n| (*n.value).clone()).ok()
     }
 
-    //- @key[in]: 将要被移除的目标节点的键
+    ///- @key[in]: 将要被移除的目标节点的键
     #[inline(always)]
     pub fn remove(&mut self, key: &[u8]) -> Result<Rc<Node<V>>, XErr<V>> {
         Ok(self.remove_inner(self.get_inner(key)?))
     }
 
     ///#### 插入数据，并按需调整整体的数据结构
-    ///- 目标已存在，且键值均相同，视为成功，否则返回哈希碰撞错误
-    ///- 目标不存在，若存在左兄弟，则在其右侧插入新节点，否则插入为全局第一个元素
+    ///- #: 成功返回新节点的merklesig
+    ///    - 目标已存在，且键值均相同，视为成功，否则返回哈希碰撞错误
+    ///    - 目标不存在，若存在左兄弟，则在其右侧插入新节点，否则插入为全局第一个元素
+    ///- @value[in]: 待存的目标值
     pub fn put(&mut self, value: V) -> Result<HashSig, XErr<V>> {
         let sig = (self.hash)(&[&value.as_bytes()[..]]);
+                    dbg!(&self.root.as_ref().map(|i|&i.key));
         match self.get_inner(&sig[..]) {
             Ok(n) => {
                 if *n.value == value {
@@ -179,9 +182,7 @@ impl<V: AsBytes> MSL<V> {
                             key: Rc::clone(&sig),
                             value: Rc::new(value),
                             merklesig: Some(Rc::clone(&sig)),
-                            upper: Weak::upgrade(&n.upper)
-                                .map(|u| Rc::downgrade(&u))
-                                .unwrap_or_default(),
+                            upper: Weak::clone(&n.upper),
                             lower: None,
                             left: Rc::downgrade(&n),
                             right: Some(Rc::clone(right)),
@@ -203,9 +204,7 @@ impl<V: AsBytes> MSL<V> {
                             key: Rc::clone(&sig),
                             value: Rc::new(value),
                             merklesig: Some(Rc::clone(&sig)),
-                            upper: Weak::upgrade(&n.upper)
-                                .map(|u| Rc::downgrade(&u))
-                                .unwrap_or_default(),
+                            upper: Weak::clone(&n.upper),
                             lower: None,
                             left: Rc::downgrade(&n),
                             right: None,
@@ -219,8 +218,9 @@ impl<V: AsBytes> MSL<V> {
                     }
 
                     dbg!(self.item_cnt_realtime());
-                    self.restruct_put(n); //重塑跳表结构
+                    //self.restruct_put(n); //重塑链表结构
                 } else if self.root.is_some() {
+                    dbg!(&self.root.as_ref().unwrap().key);
                     let mut lowest = self.get_lowest_first_node().unwrap();
                     new = Rc::new(Node {
                         key: Rc::clone(&sig),
@@ -273,13 +273,13 @@ impl<V: AsBytes> MSL<V> {
                             rightest = Some(r);
                         }
 
-                        uppest = u;
                         root = uppest_new;
+                        uppest = u;
                     }
 
                     self.root = Some(root);
                     dbg!(self.item_cnt_realtime());
-                    self.restruct_put(Rc::clone(&new)); //重塑跳表结构
+                    //self.restruct_put(Rc::clone(&new)); //重塑链表结构
                 } else {
                     new = Rc::new(Node {
                         key: Rc::clone(&sig),
@@ -365,14 +365,14 @@ struct Adjacency<V: AsBytes> {
     right_unit: Vec<Rc<Node<V>>>,
 }
 
-impl<V: AsBytes> MSL<V> {
+impl<V: AsBytes> MCL<V> {
     //#### 检查输入的merklesig字节长度是否合法
     #[inline(always)]
     fn check_merklesig_len(&self, hashsig: &[u8]) -> bool {
         hashsig.len() == self.merklesig_len
     }
 
-    //#### 获取跳表中所有元素的数量
+    //#### 获取链表中所有元素的数量
     #[inline(always)]
     fn item_cnt_realtime(&self) -> usize {
         if let Some(mut n) = self.get_lowest_first_node() {
@@ -414,7 +414,7 @@ impl<V: AsBytes> MSL<V> {
 
     //#### 查询数据
     //- #: 成功返回目标节点指针，
-    //失败返回错误原因(其中不存在的情况，返回可插入位置的Option<左兄弟指针>)
+    //失败返回错误原因(其中不存在的情况，返回可插入位置的Option<`左`兄弟指针>)
     #[inline(always)]
     fn get_inner(&self, key: &[u8]) -> Result<Rc<Node<V>>, XErr<V>> {
         if !self.check_merklesig_len(key) {
@@ -424,89 +424,68 @@ impl<V: AsBytes> MSL<V> {
             return Err(XErr::NotExists(None));
         }
 
-        let mut res = None;
-        Self::get_inner_r(key, Rc::clone(&self.root.as_ref().unwrap()), &mut res);
+        let root = Rc::clone(self.root.as_ref().unwrap());
+        let rootkey = &root.key[..];
 
-        if let Some(n) = res {
-            if key == &n.key[..] {
-                return Ok(n);
-            } else {
-                return Err(XErr::NotExists(Some(n)));
-            }
+        //处理root节点的特殊情况
+        if key == rootkey {
+            Ok(root)
+        } else if key < rootkey {
+            Err(XErr::NotExists(None))
         } else {
-            return Err(XErr::NotExists(None));
+            let mut res = None;
+            Self::get_inner_r(key, root, &mut res);
+            //无论无何，都不可能为None：
+            //    - 查询成功，返回目标节点
+            //    - 查询失败，返回其可插入点的左兄弟
+            let node = res.unwrap();
+            if key == &node.key[..] {
+                dbg!(1);
+                Ok(node)
+            } else {
+                dbg!(2);
+                Err(XErr::NotExists(Some(node)))
+            }
         }
     }
 
     //#### should be a tail-recursion
+    //- @key[in]: 待查找的目标key
+    //- @node[in]: 已经过上一层判断过节点，key > node.key一定成立
     //- @res[out]: 最终结果写出之地
-    #[allow(clippy::never_loop)]
     fn get_inner_r(key: &[u8], node: Rc<Node<V>>, res: &mut Option<Rc<Node<V>>>) {
         let mut cur = node;
-        let mut curkey = &cur.key[..];
+        let mut right;
+        let mut curkey;
 
-        if key == curkey {
-            *res = Some(cur);
-            return;
-        } else if key > curkey {
-            'm: loop {
-                while let Some(right) = cur.right.as_ref() {
-                    cur = Rc::clone(right);
-                    curkey = &cur.key[..];
-                    if key == curkey {
-                        *res = Some(cur);
-                        return;
-                    } else if key < curkey {
-                        if let Some(lower) = cur.lower.as_ref() {
-                            cur = Rc::clone(lower);
-                            break 'm;
-                        } else {
-                            //查找失败返回其左兄弟
-                            *res = Some(cur);
-                            return;
-                        }
-                    }
-                }
-
-                //比当前层的所有元素都大
-                if let Some(lower) = cur.lower.as_ref() {
-                    cur = Rc::clone(lower);
-                    break;
-                } else {
-                    return;
-                }
-            }
-        } else {
-            'n: loop {
-                while let Some(left) = Weak::upgrade(&cur.left) {
-                    cur = left;
-                    curkey = &cur.key[..];
-                    if key == curkey {
-                        *res = Some(cur);
-                        return;
-                    } else if key > curkey {
-                        if let Some(lower) = cur.lower.as_ref() {
-                            cur = Rc::clone(lower);
-                            break 'n;
-                        } else {
-                            //查找失败返回其左兄弟
-                            *res = cur.right.clone();
-                            return;
-                        }
-                    }
-                }
-
-                //比当前层的所有元素都小，由于所有层级的第一个节点都是相同的，
-                //故此种情况即是查询失败，不需要进一步判断
+        //单调右向搜索
+        while let Some(r) = cur.right.as_ref() {
+            right = Rc::clone(r);
+            curkey = &right.key[..];
+            if key == curkey {
+                *res = Some(right);
                 return;
+            } else if key < curkey {
+                break;
+            } else {
+                cur = right;
             }
         }
 
-        Self::get_inner_r(key, cur, res);
+        //放在循环外部，以兼容全局只有root一个节点时，
+        //同时新key比root.key大的情况
+        if cur.lower.is_none() {
+            //查找失败返回其左兄弟
+            *res = Some(cur);
+            return;
+        }
+
+        //进入下一轮递归
+        Self::get_inner_r(key, Rc::clone(cur.lower.as_ref().unwrap()), res);
     }
 
     //#### 删除数据，并按需调整整体的数据结构，若被删节点：
-    //1. 若左右兄弟皆为空，则说明删除的是节点总数为一的跳表的唯一节点，直接将根节点置空即可
+    //1. 若左右兄弟皆为空，则说明删除的是节点总数为一的链表的唯一节点，直接将根节点置空即可
     //2. 若左兄弟为空，右兄弟不为空，说明删除的是首节点，只需调整右兄弟指针
     //3. 若左兄弟不为空，右兄弟为空，说明删除的是末尾节点，只需调整左兄弟指针
     //4. 若左右兄弟皆不为空，需同时调节左右兄弟指针
@@ -674,7 +653,7 @@ impl<V: AsBytes> MSL<V> {
     }
 
     //#### 新增节点后，
-    //- 递归向上调整跳表结构，递归至最顶层时，检查是否有需要分裂的满员单元
+    //- 递归向上调整链表结构，递归至最顶层时，检查是否有需要分裂的满员单元
     //- 刷新merkle proof hashsig
     //- should be a tail-recursion
     fn restruct_put(&mut self, node: Rc<Node<V>>) {
@@ -682,7 +661,7 @@ impl<V: AsBytes> MSL<V> {
 
         //满员则执行单元分裂
         if self.unit_maxsiz == unit.len() {
-            //跳表初始化时，已保证self.unit_maxsiz >= 2
+            //链表初始化时，已保证self.unit_maxsiz >= 2
             let a = Rc::clone(&unit[0]); //等同于self.root.unwrap()
             let b = Rc::clone(&unit[self.unit_maxsiz / 2]);
 
@@ -691,9 +670,7 @@ impl<V: AsBytes> MSL<V> {
                     key: Rc::clone(&b.key),
                     value: Rc::clone(&b.value),
                     merklesig: None, //will be refreshed by another function
-                    upper: Weak::upgrade(&u.upper)
-                        .map(|u| Rc::downgrade(&u))
-                        .unwrap_or_default(),
+                    upper: Weak::clone(&u.upper),
                     lower: Some(Rc::clone(&b)),
                     left: Rc::downgrade(&u),
                     right: u.right.clone(),
@@ -735,7 +712,7 @@ impl<V: AsBytes> MSL<V> {
     }
 
     //#### 删除节点后，
-    //- 递归向上调整跳表结构，递归至最顶层时，检查是否可以降低树高度
+    //- 递归向上调整链表结构，递归至最顶层时，检查是否可以降低树高度
     //- 刷新merkle proof hashsig
     //- should be a tail-recursion
     fn restruct_remove(&mut self, node: Rc<Node<V>>) {

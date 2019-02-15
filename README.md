@@ -15,14 +15,14 @@ cargo doc --open
 # Develop For Production
 #### Tree
 > - [ ] [patricia trie](src/data_structure/tree/patricia_trie)
-> - [x] [MPT](src/data_structure/tree/mpt)(Merkle Patricia Trie)
-> - [ ] [SPT](src/data_structure/tree/spt)(Sharding Patricia Trie)
 > - [ ] [cross list](src/data_structure/tree/cross_list)
-> - [ ] [MCL](src/data_structure/tree/mcl)(Merkle Cross List)
+> - [ ] [SPT](src/data_structure/tree/spt)(Sharding Patricia Trie)
 > - [ ] [SCL](src/data_structure/tree/scl)(Sharding Cross-List:
 suit for memory query of big-data(many GBs, etc.), with short key(usually primary-type: i32/usize/u128/...etc.))
 > - [ ] [SCLPT](src/data_structure/tree/sclpt)(Sharding Cross-List Patricia-Trie:
 suit for memory query of big-data(many GBs, etc.) with long key(string/Vec/Box/...etc.))
+> - [x] [MPT](src/data_structure/tree/mpt)(Merkle Patricia Trie)
+> - [ ] [MCL](src/data_structure/tree/mcl)(Merkle Cross List)
 
 #### SerDe
 > - [ ] [RLP](src/data_structure/tree/rlp)(RLP [de]serialize algorithm used in ethereum)

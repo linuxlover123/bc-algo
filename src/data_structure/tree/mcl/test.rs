@@ -44,9 +44,10 @@ macro_rules! source_type_test {
 
             pub fn $name<T: AsBytes>(sample: Vec<T>) {
                 let mut hashsigs = vec![];
-                let mut msl = CrossList::default();
+                let mut msl = MCL::default();
 
                 for v in sample.iter().cloned() {
+                    dbg!(&v);
                     hashsigs.push(msl.put(v).unwrap());
                 }
 
@@ -54,7 +55,7 @@ macro_rules! source_type_test {
                 assert_eq!(hashsigs.len(), msl.item_cnt());
                 assert_eq!(msl.item_cnt_realtime(), msl.item_cnt());
 
-                assert!(msl.root_merklesig().is_some());
+                assert!(msl.merklesig().is_some());
                 for (v, h) in sample.iter().zip(hashsigs.iter()) {
                     assert_eq!(v, &msl.get(h).unwrap());
                     assert!(msl.proof(h).unwrap());
@@ -75,16 +76,16 @@ macro_rules! source_type_test {
     };
 }
 
-source_type_test!(msl_char, char);
 source_type_test!(msl_u8, u8);
-source_type_test!(msl_u16, u16);
-source_type_test!(msl_u32, u32);
-source_type_test!(msl_u64, u64);
-source_type_test!(msl_u128, u128);
-source_type_test!(msl_usize, usize);
-source_type_test!(msl_i8, i8);
-source_type_test!(msl_i16, i16);
-source_type_test!(msl_i32, i32);
-source_type_test!(msl_i64, i64);
-source_type_test!(msl_i128, i128);
-source_type_test!(msl_isize, isize);
+//source_type_test!(msl_u16, u16);
+//source_type_test!(msl_u32, u32);
+//source_type_test!(msl_u64, u64);
+//source_type_test!(msl_u128, u128);
+//source_type_test!(msl_usize, usize);
+//source_type_test!(msl_i8, i8);
+//source_type_test!(msl_i16, i16);
+//source_type_test!(msl_i32, i32);
+//source_type_test!(msl_i64, i64);
+//source_type_test!(msl_i128, i128);
+//source_type_test!(msl_isize, isize);
+//source_type_test!(msl_char, char);
