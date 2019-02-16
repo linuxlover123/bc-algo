@@ -164,7 +164,6 @@ impl<V: AsBytes> MCL<V> {
     ///- @value[in]: 待存的目标值
     pub fn put(&mut self, value: V) -> Result<HashSig, XErr<V>> {
         let sig = (self.hash)(&[&value.as_bytes()[..]]);
-                    dbg!(&self.root.as_ref().map(|i|&i.key));
         match self.get_inner(&sig[..]) {
             Ok(n) => {
                 if *n.value == value {
@@ -217,10 +216,8 @@ impl<V: AsBytes> MCL<V> {
                         }
                     }
 
-                    dbg!(self.item_cnt_realtime());
-                    //self.restruct_put(n); //重塑链表结构
+                //self.restruct_put(n); //重塑链表结构
                 } else if self.root.is_some() {
-                    dbg!(&self.root.as_ref().unwrap().key);
                     let mut lowest = self.get_lowest_first_node().unwrap();
                     new = Rc::new(Node {
                         key: Rc::clone(&sig),
@@ -278,8 +275,7 @@ impl<V: AsBytes> MCL<V> {
                     }
 
                     self.root = Some(root);
-                    dbg!(self.item_cnt_realtime());
-                    //self.restruct_put(Rc::clone(&new)); //重塑链表结构
+                //self.restruct_put(Rc::clone(&new)); //重塑链表结构
                 } else {
                     new = Rc::new(Node {
                         key: Rc::clone(&sig),
@@ -291,7 +287,6 @@ impl<V: AsBytes> MCL<V> {
                         right: None,
                     });
                     self.root = Some(Rc::clone(&new));
-                    dbg!(self.item_cnt_realtime());
                 }
 
                 //重塑merkle proof hashsig
@@ -356,12 +351,10 @@ impl<V: AsBytes> MCL<V> {
     }
 }
 
-//- @self_unit: 自身所在单元的节点集合
-//- @left_unit: 左邻单元的节点集合
+//- @my_unit: 自身所在单元的节点集合
 //- @right_unit: 右邻单元的节点集合
 struct Adjacency<V: AsBytes> {
-    self_unit: Vec<Rc<Node<V>>>,
-    left_unit: Vec<Rc<Node<V>>>,
+    my_unit: Vec<Rc<Node<V>>>,
     right_unit: Vec<Rc<Node<V>>>,
 }
 
@@ -377,9 +370,9 @@ impl<V: AsBytes> MCL<V> {
     fn item_cnt_realtime(&self) -> usize {
         if let Some(mut n) = self.get_lowest_first_node() {
             let mut i = 1;
-            while let Some(r) = Weak::upgrade(&n.left) {
+            while let Some(r) = n.right.as_ref() {
                 i += 1;
-                n = r;
+                n = Rc::clone(r);
             }
             i
         } else {
@@ -440,16 +433,13 @@ impl<V: AsBytes> MCL<V> {
             //    - 查询失败，返回其可插入点的左兄弟
             let node = res.unwrap();
             if key == &node.key[..] {
-                dbg!(1);
                 Ok(node)
             } else {
-                dbg!(2);
                 Err(XErr::NotExists(Some(node)))
             }
         }
     }
 
-    //#### should be a tail-recursion
     //- @key[in]: 待查找的目标key
     //- @node[in]: 已经过上一层判断过节点，key > node.key一定成立
     //- @res[out]: 最终结果写出之地
@@ -466,7 +456,7 @@ impl<V: AsBytes> MCL<V> {
                 *res = Some(right);
                 return;
             } else if key < curkey {
-                break;
+                break; //之后将进入下一轮递归
             } else {
                 cur = right;
             }
@@ -478,9 +468,9 @@ impl<V: AsBytes> MCL<V> {
             //查找失败返回其左兄弟
             *res = Some(cur);
             return;
-        }
+        } //之后将进入下一轮递归
 
-        //进入下一轮递归
+        //should be a tail-recursion
         Self::get_inner_r(key, Rc::clone(cur.lower.as_ref().unwrap()), res);
     }
 
@@ -549,21 +539,20 @@ impl<V: AsBytes> MCL<V> {
 
     //#### 由下而上递归刷新merkle proof hashsig
     //- 根哈希需要特殊处理
-    //- should be a tail-recursion
     fn merkle_refresh(&self, node: Rc<Node<V>>) {
-        let unit = Self::self_unit(Rc::clone(&node));
+        let unit = self.my_unit(Rc::clone(&node));
+        let upper;
         let sigs = unit
             .iter()
             .map(|i| &i.merklesig.as_ref().unwrap()[..])
             .collect::<Vec<&[u8]>>();
-        if let Some(mut u) = Weak::upgrade(&node.upper) {
+
+        if let Some(u) = Weak::upgrade(&node.upper) {
             let raw = Rc::into_raw(u) as *mut Node<V>;
             unsafe {
                 (*raw).merklesig = Some((self.hash)(&sigs.as_slice()));
-                u = Rc::from_raw(raw);
-            }
-
-            self.merkle_refresh(u);
+                upper = Rc::from_raw(raw);
+            } //之后将进入下一轮递归
         } else {
             let raw = Rc::into_raw(Rc::clone(self.root.as_ref().unwrap())) as *mut Node<V>;
             unsafe {
@@ -573,19 +562,21 @@ impl<V: AsBytes> MCL<V> {
 
             return;
         }
+
+        //should be a tail-recursion
+        self.merkle_refresh(upper);
     }
 
     //#### 根据给定的节点，统计其自身所在单元及左右相邻单元的节点指针集合
-    fn adjacent_statistics(node: Rc<Node<V>>) -> Adjacency<V> {
+    fn adjacent_statistics(&self, node: Rc<Node<V>>) -> Adjacency<V> {
         Adjacency {
-            self_unit: Self::self_unit(Rc::clone(&node)),
-            left_unit: Self::left_unit(Rc::clone(&node)),
-            right_unit: Self::right_unit(node),
+            my_unit: self.my_unit(Rc::clone(&node)),
+            right_unit: self.right_unit(node),
         }
     }
 
     //#### self helper for adjacent_statistics
-    fn self_unit(node: Rc<Node<V>>) -> Vec<Rc<Node<V>>> {
+    fn my_unit(&self, node: Rc<Node<V>>) -> Vec<Rc<Node<V>>> {
         let mut res = vec![];
         if let Some(u) = Weak::upgrade(&node.upper) {
             let mut cur = Rc::clone(u.lower.as_ref().unwrap());
@@ -598,10 +589,10 @@ impl<V: AsBytes> MCL<V> {
                 res.push(Rc::clone(&cur));
             }
         } else {
-            let mut cur = node;
-            while let Some(l) = Weak::upgrade(&cur.left) {
-                cur = l;
-            }
+            //此时根节点不可能为空
+            let mut cur = Rc::clone(self.root.as_ref().unwrap());
+            res.push(Rc::clone(&cur));
+
             while let Some(r) = cur.right.as_ref() {
                 cur = Rc::clone(r);
                 res.push(Rc::clone(&cur));
@@ -610,29 +601,8 @@ impl<V: AsBytes> MCL<V> {
         res
     }
 
-    //#### left helper for adjacent_statistics
-    fn left_unit(node: Rc<Node<V>>) -> Vec<Rc<Node<V>>> {
-        let mut res = vec![];
-        if let Some(u) = Weak::upgrade(&node.upper) {
-            if let Some(l) = Weak::upgrade(&u.left) {
-                let mut cur = Rc::clone(l.lower.as_ref().unwrap());
-                res.push(Rc::clone(&cur));
-                while let Some(r) = cur.right.as_ref() {
-                    if Rc::ptr_eq(r, Weak::upgrade(&r.upper).unwrap().lower.as_ref().unwrap()) {
-                        break;
-                    }
-                    cur = Rc::clone(r);
-                    res.push(Rc::clone(&cur));
-                }
-            }
-        }
-
-        //无父节点时，说明处于顶层，左右单元均为空
-        res
-    }
-
     //#### right helper for adjacent_statistics
-    fn right_unit(node: Rc<Node<V>>) -> Vec<Rc<Node<V>>> {
+    fn right_unit(&self, node: Rc<Node<V>>) -> Vec<Rc<Node<V>>> {
         let mut res = vec![];
         if let Some(u) = Weak::upgrade(&node.upper) {
             if let Some(r) = u.right.as_ref() {
@@ -648,16 +618,21 @@ impl<V: AsBytes> MCL<V> {
             }
         }
 
-        //无父节点时，说明处于顶层，左右单元均为空
+        /*
+         * 无父节点时，说明处于顶层，
+         * 而顶层永远只有一个单元，
+         * 故其左右单元均为空
+         */
+
         res
     }
 
     //#### 新增节点后，
     //- 递归向上调整链表结构，递归至最顶层时，检查是否有需要分裂的满员单元
     //- 刷新merkle proof hashsig
-    //- should be a tail-recursion
     fn restruct_put(&mut self, node: Rc<Node<V>>) {
-        let unit = Self::self_unit(Rc::clone(&node));
+        let unit = self.my_unit(Rc::clone(&node));
+        let new;
 
         //满员则执行单元分裂
         if self.unit_maxsiz == unit.len() {
@@ -666,7 +641,7 @@ impl<V: AsBytes> MCL<V> {
             let b = Rc::clone(&unit[self.unit_maxsiz / 2]);
 
             if let Some(u) = Weak::upgrade(&node.upper) {
-                let new = Rc::new(Node {
+                new = Rc::new(Node {
                     key: Rc::clone(&b.key),
                     value: Rc::clone(&b.value),
                     merklesig: None, //will be refreshed by another function
@@ -680,9 +655,7 @@ impl<V: AsBytes> MCL<V> {
                 unsafe {
                     (*raw).right = Some(Rc::clone(&new));
                     Rc::from_raw(raw);
-                }
-
-                self.restruct_put(new);
+                } //之后将进入下一轮递归
             } else {
                 let root = Rc::new(Node {
                     key: Rc::clone(&a.key),
@@ -707,37 +680,39 @@ impl<V: AsBytes> MCL<V> {
                 }
 
                 self.root = Some(root);
+                return;
             }
+
+            //should be a tail-recursion
+            self.restruct_put(new);
         }
     }
 
     //#### 删除节点后，
     //- 递归向上调整链表结构，递归至最顶层时，检查是否可以降低树高度
     //- 刷新merkle proof hashsig
-    //- should be a tail-recursion
     fn restruct_remove(&mut self, node: Rc<Node<V>>) {
+        let upper;
         if let Some(u) = Weak::upgrade(&node.upper) {
             if self.is_first_node(Rc::clone(&node)) {
                 self.remove_inner(Rc::clone(&u));
                 self.restruct_remove(u);
             }
 
-            let adj = Self::adjacent_statistics(node);
+            let adj = self.adjacent_statistics(node);
             let standard = self.unit_maxsiz / 2;
 
             //本单元及其所有非空邻接单元，必然存在父节点
-            if standard > adj.self_unit.len() {
-                let upper;
-                if !adj.left_unit.is_empty() && standard > adj.left_unit.len() {
-                    upper = Weak::upgrade(&adj.self_unit[0].upper).unwrap();
-                } else if !adj.right_unit.is_empty() && standard > adj.right_unit.len() {
+            if standard > adj.my_unit.len() {
+                if !adj.right_unit.is_empty() && standard > adj.right_unit.len() {
                     upper = Weak::upgrade(&adj.right_unit[0].upper).unwrap();
                 } else {
                     return;
                 }
 
-                self.remove_inner(Rc::clone(&upper));
-                self.restruct_remove(upper);
+                self.remove_inner(Rc::clone(&upper)); //之后将进入下一轮递归
+            } else {
+                return;
             }
         } else {
             //顶层除根结点外，还存在其它结点，则不需要降低树高度
@@ -748,8 +723,7 @@ impl<V: AsBytes> MCL<V> {
             let mut root = Rc::clone(&self.root.as_ref().unwrap());
             while let Some(l) = root.lower.as_ref() {
                 //沿根节点垂直向下的所有节点，其左单元一定为空，无须判断
-                if 1 == Self::self_unit(Rc::clone(l)).len()
-                    && Self::right_unit(Rc::clone(l)).is_empty()
+                if 1 == self.my_unit(Rc::clone(l)).len() && self.right_unit(Rc::clone(l)).is_empty()
                 {
                     root = Rc::clone(l);
                     break;
@@ -778,9 +752,11 @@ impl<V: AsBytes> MCL<V> {
             self.root = Some(root);
             return;
         }
+
+        //should be a tail-recursion
+        self.restruct_remove(upper);
     }
 
-    //#### should be a tail-recursion
     //- @head[in]: 每一层的首节点
     //- @unit_siz[in]: 优化的目标单元大小
     //- @sigbug[in]: 缓存区复用
@@ -875,9 +851,10 @@ impl<V: AsBytes> MCL<V> {
         if upper_len < self.unit_maxsiz {
             self.root = Some(upper_head);
             return;
-        } else {
-            self.restruct_all_inner(upper_head, unit_siz, sigbuf);
-        }
+        } //之后将进入下一轮递归
+
+        //should be a tail-recursion
+        self.restruct_all_inner(upper_head, unit_siz, sigbuf);
     }
 
     //#### 获取指定的key存在的merkle路径证明
@@ -890,11 +867,10 @@ impl<V: AsBytes> MCL<V> {
         Ok(path)
     }
 
-    //#### should be a tail-recursion
     //- @cur[in]: 当前节点
     //- @path[out]: 从叶到根的順序写出结果
     fn get_proof_path_r(&self, cur: Rc<Node<V>>, path: &mut Vec<ProofPath>) {
-        let unit = Self::self_unit(Rc::clone(&cur));
+        let unit = self.my_unit(Rc::clone(&cur));
         let sigs = unit
             .iter()
             .map(|i| Rc::clone(i.merklesig.as_ref().unwrap()))
@@ -904,11 +880,13 @@ impl<V: AsBytes> MCL<V> {
             merklesigs: sigs,
         });
 
-        if let Some(u) = Weak::upgrade(&cur.upper) {
-            self.get_proof_path_r(u, path);
-        } else {
+        let upper = Weak::upgrade(&cur.upper);
+        if upper.is_none() {
             return;
-        }
+        } //之后将进入下一轮递归
+
+        //should be a tail-recursion
+        self.get_proof_path_r(upper.unwrap(), path);
     }
 }
 
