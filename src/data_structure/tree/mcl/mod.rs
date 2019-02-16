@@ -14,7 +14,7 @@
 //!
 //! #### Example
 //!```
-//!    use bc_algo::msl::*;
+//!    use bc_algo::mcl::*;
 //!    use rand::random;
 //!
 //!    fn main() {
@@ -23,21 +23,21 @@
 //!        sample.sort();
 //!        sample.dedup();
 //!
-//!        let mut msl = MCL::default();
+//!        let mut mcl = MCL::default();
 //!        let mut hashsigs = vec![];
 //!
 //!        for v in sample.iter().cloned() {
-//!            hashsigs.push(msl.put(v).unwrap());
+//!            hashsigs.push(mcl.put(v).unwrap());
 //!        }
 //!
-//!        assert_eq!(sample.len(), msl.item_cnt());
-//!        assert_eq!(hashsigs.len(), msl.item_cnt());
-//!        assert_eq!(msl.item_cnt_realtime(), msl.item_cnt());
+//!        assert_eq!(sample.len(), mcl.item_cnt());
+//!        assert_eq!(hashsigs.len(), mcl.item_cnt());
+//!        assert_eq!(mcl.item_cnt_realtime(), mcl.item_cnt());
 //!
-//!        assert!(msl.merklesig().is_some());
+//!        assert!(mcl.merklesig().is_some());
 //!        for (v, h) in sample.iter().zip(hashsigs.iter()) {
-//!            assert_eq!(v, &msl.get(h).unwrap());
-//!            assert!(msl.proof(h).unwrap());
+//!            assert_eq!(v, &mcl.get(h).unwrap());
+//!            assert!(mcl.proof(h).unwrap());
 //!        }
 //!    }
 //!```
@@ -85,6 +85,65 @@ pub struct Node<V: AsBytes> {
     right: Option<Rc<Node<V>>>, //右侧节点(一对一)
 }
 
+macro_rules! rc_update {
+    ($n: expr, $raw: expr, $v: expr) => {
+        $raw = Rc::into_raw($n) as *mut Node<V>;
+        unsafe {
+            (*$raw).lower = $v;
+            $n = Rc::from_raw($raw);
+        }
+    };
+    (^$n: expr, $raw: expr, $v: expr) => {
+        $raw = Rc::into_raw($n) as *mut Node<V>;
+        unsafe {
+            (*$raw).upper = $v;
+            $n = Rc::from_raw($raw);
+        }
+    };
+    (->$n: expr, $raw: expr, $v: expr) => {
+        $raw = Rc::into_raw($n) as *mut Node<V>;
+        unsafe {
+            (*$raw).right = $v;
+            $n = Rc::from_raw($raw);
+        }
+    };
+    (<-$n: expr, $raw: expr, $v: expr) => {
+        $raw = Rc::into_raw($n) as *mut Node<V>;
+        unsafe {
+            (*$raw).left = $v;
+            $n = Rc::from_raw($raw);
+        }
+    };
+    (@$n: expr, $raw: expr, $v: expr) => {
+        $raw = Rc::into_raw($n) as *mut Node<V>;
+        unsafe {
+            (*$raw).lower = $v;
+            Rc::from_raw($raw);
+        }
+    };
+    (@^$n: expr, $raw: expr, $v: expr) => {
+        $raw = Rc::into_raw($n) as *mut Node<V>;
+        unsafe {
+            (*$raw).upper = $v;
+            Rc::from_raw($raw);
+        }
+    };
+    (@->$n: expr, $raw: expr, $v: expr) => {
+        $raw = Rc::into_raw($n) as *mut Node<V>;
+        unsafe {
+            (*$raw).right = $v;
+            Rc::from_raw($raw);
+        }
+    };
+    (@<-$n: expr, $raw: expr, $v: expr) => {
+        $raw = Rc::into_raw($n) as *mut Node<V>;
+        unsafe {
+            (*$raw).left = $v;
+            Rc::from_raw($raw);
+        }
+    };
+}
+
 impl<V: AsBytes> MCL<V> {
     ///#### 初始化
     ///- @unit_maxsiz[in]: 必须是不小于2的整数，元素数量超过此值将进行单元分裂
@@ -127,6 +186,21 @@ impl<V: AsBytes> MCL<V> {
     #[inline(always)]
     pub fn item_cnt(&self) -> usize {
         self.item_cnt
+    }
+
+    ///#### 获取链表中所有元素的数量
+    #[inline(always)]
+    pub fn item_cnt_realtime(&self) -> usize {
+        if let Some(mut n) = self.get_lowest_first_node() {
+            let mut i = 1;
+            while let Some(r) = n.right.as_ref() {
+                i += 1;
+                n = Rc::clone(r);
+            }
+            i
+        } else {
+            0
+        }
     }
 
     ///#### 获取链表的树高度
@@ -176,47 +250,26 @@ impl<V: AsBytes> MCL<V> {
                 let mut new;
                 let mut raw;
                 if let Some(n) = n {
+                    let mut node = Node {
+                        key: Rc::clone(&sig),
+                        value: Rc::new(value),
+                        merklesig: Some(Rc::clone(&sig)),
+                        upper: Weak::clone(&n.upper),
+                        lower: None,
+                        left: Rc::downgrade(&n),
+                        right: None,
+                    };
                     if let Some(right) = n.right.as_ref() {
-                        new = Rc::new(Node {
-                            key: Rc::clone(&sig),
-                            value: Rc::new(value),
-                            merklesig: Some(Rc::clone(&sig)),
-                            upper: Weak::clone(&n.upper),
-                            lower: None,
-                            left: Rc::downgrade(&n),
-                            right: Some(Rc::clone(right)),
-                        });
-
-                        raw = Rc::into_raw(Rc::clone(&n)) as *mut Node<V>;
-                        unsafe {
-                            (*raw).right = Some(Rc::clone(&new));
-                            Rc::from_raw(raw);
-                        }
-
-                        raw = Rc::into_raw(Rc::clone(&right)) as *mut Node<V>;
-                        unsafe {
-                            (*raw).left = Rc::downgrade(&new);
-                            Rc::from_raw(raw);
-                        }
+                        node.right = Some(Rc::clone(right));
+                        new = Rc::new(node);
+                        rc_update!(@->Rc::clone(&n), raw, Some(Rc::clone(&new)));
+                        rc_update!(@<-Rc::clone(right), raw, Rc::downgrade(&new));
                     } else {
-                        new = Rc::new(Node {
-                            key: Rc::clone(&sig),
-                            value: Rc::new(value),
-                            merklesig: Some(Rc::clone(&sig)),
-                            upper: Weak::clone(&n.upper),
-                            lower: None,
-                            left: Rc::downgrade(&n),
-                            right: None,
-                        });
-
-                        raw = Rc::into_raw(Rc::clone(&n)) as *mut Node<V>;
-                        unsafe {
-                            (*raw).right = Some(Rc::clone(&new));
-                            Rc::from_raw(raw);
-                        }
+                        new = Rc::new(node);
+                        rc_update!(@->n, raw, Some(Rc::clone(&new)));
                     }
 
-                //self.restruct_put(n); //重塑链表结构
+                    self.restruct_put(new); //重塑链表结构
                 } else if self.root.is_some() {
                     let mut lowest = self.get_lowest_first_node().unwrap();
                     new = Rc::new(Node {
@@ -229,53 +282,35 @@ impl<V: AsBytes> MCL<V> {
                         right: Some(Rc::clone(&lowest)),
                     });
 
-                    raw = Rc::into_raw(lowest) as *mut Node<V>;
-                    unsafe {
-                        (*raw).left = Rc::downgrade(&new);
-                        lowest = Rc::from_raw(raw);
-                    }
+                    rc_update!(<-lowest, raw, Rc::downgrade(&new));
 
                     let mut uppest = lowest;
                     let mut uppest_new;
-                    let mut rightest;
                     let mut root = Rc::clone(&new);
                     while let Some(u) = Weak::upgrade(&uppest.upper) {
                         uppest_new = Rc::new(Node {
                             key: Rc::clone(&root.key),
                             value: Rc::clone(&root.value),
-                            merklesig: None, //将在restruct_put中刷新
+                            merklesig: Some(self.merklesig_upper(&self.my_unit(Rc::clone(&root)))),
                             upper: Weak::new(),
                             lower: Some(Rc::clone(&root)),
                             left: Weak::new(),
                             right: u.right.clone(),
                         });
 
-                        raw = Rc::into_raw(root) as *mut Node<V>;
-                        unsafe {
-                            (*raw).upper = Rc::downgrade(&uppest_new);
-                            root = Rc::from_raw(raw);
-                        }
+                        rc_update!(^root, raw, Rc::downgrade(&uppest_new));
 
-                        rightest = root.right.clone();
-                        while let Some(mut r) = rightest {
-                            if self.is_first_node(Rc::clone(&r)) {
-                                break;
-                            }
-
-                            raw = Rc::into_raw(r) as *mut Node<V>;
-                            unsafe {
-                                (*raw).upper = Rc::downgrade(&uppest_new);
-                                r = Rc::from_raw(raw);
-                            }
-                            rightest = Some(r);
-                        }
+                        //首先，断开旧root垂直线的父连接线
+                        //然后，基于长兄节点，右向刷新兄弟节点的父节点
+                        rc_update!(@^uppest, raw, Weak::new());
+                        self.parent_refresh(Rc::clone(&root));
 
                         root = uppest_new;
                         uppest = u;
                     }
 
                     self.root = Some(root);
-                //self.restruct_put(Rc::clone(&new)); //重塑链表结构
+                    self.restruct_put(new); //重塑链表结构
                 } else {
                     new = Rc::new(Node {
                         key: Rc::clone(&sig),
@@ -286,11 +321,10 @@ impl<V: AsBytes> MCL<V> {
                         left: Weak::new(),
                         right: None,
                     });
-                    self.root = Some(Rc::clone(&new));
-                }
 
-                //重塑merkle proof hashsig
-                self.merkle_refresh(new);
+                    self.merklesig = Some((self.hash)(&[&sig[..]]));
+                    self.root = Some(new);
+                }
 
                 self.item_cnt += 1;
                 Ok(sig)
@@ -354,6 +388,7 @@ impl<V: AsBytes> MCL<V> {
 //- @my_unit: 自身所在单元的节点集合
 //- @right_unit: 右邻单元的节点集合
 struct Adjacency<V: AsBytes> {
+    left_unit: Vec<Rc<Node<V>>>,
     my_unit: Vec<Rc<Node<V>>>,
     right_unit: Vec<Rc<Node<V>>>,
 }
@@ -365,34 +400,16 @@ impl<V: AsBytes> MCL<V> {
         hashsig.len() == self.merklesig_len
     }
 
-    //#### 获取链表中所有元素的数量
-    #[inline(always)]
-    fn item_cnt_realtime(&self) -> usize {
-        if let Some(mut n) = self.get_lowest_first_node() {
-            let mut i = 1;
-            while let Some(r) = n.right.as_ref() {
-                i += 1;
-                n = Rc::clone(r);
-            }
-            i
-        } else {
-            0
-        }
-    }
-
     #[inline(always)]
     fn is_first_node(&self, node: Rc<Node<V>>) -> bool {
-        let root = if let Some(r) = self.root.as_ref() {
-            r
-        } else {
-            return false;
-        };
-
-        if let Some(u) = Weak::upgrade(&node.upper) {
-            Rc::ptr_eq(u.lower.as_ref().unwrap(), &node)
-        } else {
-            Rc::ptr_eq(&node, root)
-        }
+        self.root
+            .as_ref()
+            .map(|root| {
+                Weak::upgrade(&node.upper)
+                    .map(|u| Rc::ptr_eq(u.lower.as_ref().unwrap(), &node))
+                    .unwrap_or_else(|| Rc::ptr_eq(&node, root))
+            })
+            .unwrap_or(false)
     }
 
     //#### 获取最底一层的首节点
@@ -499,67 +516,48 @@ impl<V: AsBytes> MCL<V> {
             self.root = None;
         } else if left.is_some() && right.is_none() {
             let l = left.unwrap();
-            raw = Rc::into_raw(l) as *mut Node<V>;
-            unsafe {
-                (*raw).right = None;
-                Rc::from_raw(raw);
-            }
+            rc_update!(@->l, raw, None);
         } else if left.is_none() && right.is_some() {
             let r = right.unwrap();
-            raw = Rc::into_raw(r) as *mut Node<V>;
-            unsafe {
-                (*raw).left = Weak::new();
-                Rc::from_raw(raw);
-            }
+            rc_update!(@<-r, raw, Weak::new());
         } else {
             let mut l = left.unwrap();
-            raw = Rc::into_raw(l) as *mut Node<V>;
-            unsafe {
-                (*raw).right = right.clone();
-                l = Rc::from_raw(raw);
-            }
-
-            raw = Rc::into_raw(right.unwrap()) as *mut Node<V>;
-            unsafe {
-                (*raw).left = Rc::downgrade(&l);
-                Rc::from_raw(raw);
-            }
+            rc_update!(->l, raw, right.clone());
+            rc_update!(@<-right.unwrap(), raw, Rc::downgrade(&l));
         }
 
         //被删除的节点，此时仍然保持其原先的上下左右连接关系
         //直接基于被删节点进行重塑即可
         self.restruct_remove(Rc::clone(&node));
 
-        //重塑merkle proof hashsig
-        self.merkle_refresh(Rc::clone(&node));
-
         self.item_cnt -= 1;
         node
     }
 
-    //#### 由下而上递归刷新merkle proof hashsig
-    //- 根哈希需要特殊处理
-    fn merkle_refresh(&self, node: Rc<Node<V>>) {
-        let unit = self.my_unit(Rc::clone(&node));
-        let upper;
-        let sigs = unit
-            .iter()
-            .map(|i| &i.merklesig.as_ref().unwrap()[..])
-            .collect::<Vec<&[u8]>>();
+    //#### 根据子节点集合，生成父节点的merklesig
+    //- @lowers[in]: children of the goal
+    fn merklesig_upper(&self, lowers: &[Rc<Node<V>>]) -> HashSig {
+        (self.hash)(
+            &lowers
+                .iter()
+                .map(|n| &n.merklesig.as_ref().unwrap()[..])
+                .collect::<Vec<&[u8]>>(),
+        )
+    }
 
+    //#### 由下而上递归刷新merkle proof hashsig
+    //- 根节点需要特殊处理
+    fn merkle_refresh(&mut self, node: Rc<Node<V>>) {
+        let upper;
+        let unit = self.my_unit(Rc::clone(&node));
         if let Some(u) = Weak::upgrade(&node.upper) {
             let raw = Rc::into_raw(u) as *mut Node<V>;
             unsafe {
-                (*raw).merklesig = Some((self.hash)(&sigs.as_slice()));
+                (*raw).merklesig = Some(self.merklesig_upper(&unit));
                 upper = Rc::from_raw(raw);
             } //之后将进入下一轮递归
         } else {
-            let raw = Rc::into_raw(Rc::clone(self.root.as_ref().unwrap())) as *mut Node<V>;
-            unsafe {
-                (*raw).merklesig = Some((self.hash)(&sigs.as_slice()));
-                Rc::from_raw(raw);
-            }
-
+            self.merklesig = Some(self.merklesig_upper(&unit));
             return;
         }
 
@@ -570,6 +568,7 @@ impl<V: AsBytes> MCL<V> {
     //#### 根据给定的节点，统计其自身所在单元及左右相邻单元的节点指针集合
     fn adjacent_statistics(&self, node: Rc<Node<V>>) -> Adjacency<V> {
         Adjacency {
+            left_unit: self.left_unit(Rc::clone(&node)),
             my_unit: self.my_unit(Rc::clone(&node)),
             right_unit: self.right_unit(node),
         }
@@ -582,11 +581,12 @@ impl<V: AsBytes> MCL<V> {
             let mut cur = Rc::clone(u.lower.as_ref().unwrap());
             res.push(Rc::clone(&cur));
             while let Some(r) = cur.right.as_ref() {
-                if Rc::ptr_eq(r, Weak::upgrade(&r.upper).unwrap().lower.as_ref().unwrap()) {
+                //相同父节点下的所有子节点集合
+                if !Rc::ptr_eq(&u, &Weak::upgrade(&r.upper).unwrap()) {
                     break;
                 }
+                res.push(Rc::clone(r));
                 cur = Rc::clone(r);
-                res.push(Rc::clone(&cur));
             }
         } else {
             //此时根节点不可能为空
@@ -594,10 +594,32 @@ impl<V: AsBytes> MCL<V> {
             res.push(Rc::clone(&cur));
 
             while let Some(r) = cur.right.as_ref() {
+                res.push(Rc::clone(r));
                 cur = Rc::clone(r);
-                res.push(Rc::clone(&cur));
             }
         }
+        res
+    }
+
+    //#### left helper for adjacent_statistics
+    fn left_unit(&self, node: Rc<Node<V>>) -> Vec<Rc<Node<V>>> {
+        let mut res = vec![];
+        if let Some(u) = Weak::upgrade(&node.upper) {
+            if let Some(lu) = Weak::upgrade(&u.left) {
+                let mut cur = Rc::clone(lu.lower.as_ref().unwrap());
+                res.push(Rc::clone(&cur));
+                while let Some(r) = cur.right.as_ref() {
+                    //相同父节点下的所有子节点集合
+                    if !Rc::ptr_eq(&lu, &Weak::upgrade(&r.upper).unwrap()) {
+                        break;
+                    }
+                    res.push(Rc::clone(r));
+                    cur = Rc::clone(r);
+                }
+            }
+        }
+
+        /* 无父节点时，说明处于顶层，而顶层永远只有一个单元，故其左右单元均为空 */
         res
     }
 
@@ -605,26 +627,35 @@ impl<V: AsBytes> MCL<V> {
     fn right_unit(&self, node: Rc<Node<V>>) -> Vec<Rc<Node<V>>> {
         let mut res = vec![];
         if let Some(u) = Weak::upgrade(&node.upper) {
-            if let Some(r) = u.right.as_ref() {
-                let mut cur = Rc::clone(r.lower.as_ref().unwrap());
+            if let Some(ru) = u.right.as_ref() {
+                let mut cur = Rc::clone(ru.lower.as_ref().unwrap());
                 res.push(Rc::clone(&cur));
                 while let Some(r) = cur.right.as_ref() {
-                    if Rc::ptr_eq(r, Weak::upgrade(&r.upper).unwrap().lower.as_ref().unwrap()) {
+                    //相同父节点下的所有子节点集合
+                    if !Rc::ptr_eq(&ru, &Weak::upgrade(&r.upper).unwrap()) {
                         break;
                     }
+                    res.push(Rc::clone(r));
                     cur = Rc::clone(r);
-                    res.push(Rc::clone(&cur));
                 }
             }
         }
 
-        /*
-         * 无父节点时，说明处于顶层，
-         * 而顶层永远只有一个单元，
-         * 故其左右单元均为空
-         */
-
+        /* 无父节点时，说明处于顶层，而顶层永远只有一个单元，故其左右单元均为空*/
         res
+    }
+
+    //#### 基于长兄节点，右向刷新各兄弟节点的父节点
+    fn parent_refresh(&self, eldest_brother: Rc<Node<V>>) {
+        let mut node = Rc::clone(&eldest_brother);
+        let mut raw;
+        while let Some(r) = node.right.as_ref() {
+            if self.is_first_node(Rc::clone(r)) {
+                break;
+            }
+            node = Rc::clone(r);
+            rc_update!(^node, raw, Weak::clone(&eldest_brother.upper));
+        }
     }
 
     //#### 新增节点后，
@@ -634,127 +665,216 @@ impl<V: AsBytes> MCL<V> {
         let unit = self.my_unit(Rc::clone(&node));
         let new;
 
-        //满员则执行单元分裂
-        if self.unit_maxsiz == unit.len() {
+        //满员或超员则执行单元分裂
+        if self.unit_maxsiz <= unit.len() {
+            let mut raw;
             //链表初始化时，已保证self.unit_maxsiz >= 2
-            let a = Rc::clone(&unit[0]); //等同于self.root.unwrap()
-            let b = Rc::clone(&unit[self.unit_maxsiz / 2]);
-
+            let mid = self.unit_maxsiz / 2;
+            let mut a = Rc::clone(&unit[0]);
+            let mut b = Rc::clone(&unit[mid]);
             if let Some(u) = Weak::upgrade(&node.upper) {
                 new = Rc::new(Node {
                     key: Rc::clone(&b.key),
                     value: Rc::clone(&b.value),
-                    merklesig: None, //will be refreshed by another function
+                    merklesig: Some(self.merklesig_upper(&unit[mid..])),
                     upper: Weak::clone(&u.upper),
                     lower: Some(Rc::clone(&b)),
                     left: Rc::downgrade(&u),
                     right: u.right.clone(),
                 });
 
-                let raw = Rc::into_raw(u) as *mut Node<V>;
+                raw = Rc::into_raw(u) as *mut Node<V>;
                 unsafe {
                     (*raw).right = Some(Rc::clone(&new));
+                    (*raw).merklesig = Some(self.merklesig_upper(&unit[..mid]));
                     Rc::from_raw(raw);
-                } //之后将进入下一轮递归
+                }
+
+                rc_update!(^b, raw, Rc::downgrade(&new));
+
+                self.parent_refresh(b); //之后将进入下一轮递归
             } else {
-                let root = Rc::new(Node {
+                let mut root = Rc::new(Node {
                     key: Rc::clone(&a.key),
                     value: Rc::clone(&a.value),
-                    merklesig: None, //will be refreshed by another function
+                    merklesig: Some(self.merklesig_upper(&unit[..mid])),
                     upper: Weak::new(),
                     lower: Some(Rc::clone(&a)),
                     left: Weak::new(),
                     right: None,
                 });
 
-                let mut raw;
-                raw = Rc::into_raw(a) as *mut Node<V>;
-                unsafe {
-                    (*raw).upper = Rc::downgrade(&root);
-                    Rc::from_raw(raw);
-                }
-                raw = Rc::into_raw(b) as *mut Node<V>;
-                unsafe {
-                    (*raw).upper = Rc::downgrade(&root);
-                    Rc::from_raw(raw);
-                }
+                new = Rc::new(Node {
+                    key: Rc::clone(&b.key),
+                    value: Rc::clone(&b.value),
+                    merklesig: Some(self.merklesig_upper(&unit[mid..])),
+                    upper: Weak::new(),
+                    lower: Some(Rc::clone(&b)),
+                    left: Rc::downgrade(&root),
+                    right: None,
+                });
+
+                rc_update!(->root, raw, Some(Rc::clone(&new)));
+
+                rc_update!(^a, raw, Rc::downgrade(&root));
+                self.parent_refresh(a);
+
+                rc_update!(^b, raw, Rc::downgrade(&new));
+                self.parent_refresh(b);
+
+                //刷新全局根哈希
+                self.merklesig = Some(self.merklesig_upper(&[Rc::clone(&root), new]));
 
                 self.root = Some(root);
                 return;
             }
-
-            //should be a tail-recursion
-            self.restruct_put(new);
+        } else {
+            //由下到上批量刷受影响的节点的merklesig
+            self.merkle_refresh(node);
+            return;
         }
+
+        //should be a tail-recursion
+        self.restruct_put(new);
     }
 
     //#### 删除节点后，
     //- 递归向上调整链表结构，递归至最顶层时，检查是否可以降低树高度
     //- 刷新merkle proof hashsig
     fn restruct_remove(&mut self, node: Rc<Node<V>>) {
-        let upper;
+        let mut raw;
         if let Some(u) = Weak::upgrade(&node.upper) {
+            //若被删除的节点的父节点也是其所在单元的首节点，
+            //则首先递归向上处理之
             if self.is_first_node(Rc::clone(&node)) {
-                self.remove_inner(Rc::clone(&u));
-                self.restruct_remove(u);
-            }
+                //若被删除的节点的右兄弟存在，
+                //且与其属于同一个单元(即：非其所在单元的首节点)，
+                //则需为其创建新的父节点
+                if let Some(r) = node.right.as_ref() {
+                    if !self.is_first_node(Rc::clone(r)) {
+                        let ru = Rc::new(Node {
+                            key: Rc::clone(&r.key),
+                            value: Rc::clone(&r.value),
+                            merklesig: None,
+                            upper: Weak::clone(&u.upper),
+                            lower: Some(Rc::clone(r)),
+                            left: Weak::clone(&u.left),
+                            right: u.right.clone(),
+                        });
 
-            let adj = self.adjacent_statistics(node);
-            let standard = self.unit_maxsiz / 2;
+                        rc_update!(@^Rc::clone(r), raw, Rc::downgrade(&ru));
 
-            //本单元及其所有非空邻接单元，必然存在父节点
-            if standard > adj.my_unit.len() {
-                if !adj.right_unit.is_empty() && standard > adj.right_unit.len() {
-                    upper = Weak::upgrade(&adj.right_unit[0].upper).unwrap();
-                } else {
-                    return;
+                        if let Some(l) = Weak::upgrade(&u.left) {
+                            rc_update!(@->l, raw, Some(Rc::clone(&ru)));
+                        }
+
+                        if let Some(r) = u.right.as_ref() {
+                            rc_update!(@<-Rc::clone(r), raw, Rc::downgrade(&ru));
+                        }
+
+                        raw = Rc::into_raw(ru) as *mut Node<V>;
+                        unsafe {
+                            (*raw).merklesig =
+                                Some(self.merklesig_upper(&self.my_unit(Rc::clone(r))));
+                            Rc::from_raw(raw);
+                        }
+                    }
                 }
 
-                self.remove_inner(Rc::clone(&upper)); //之后将进入下一轮递归
+                self.remove_inner(Rc::clone(&u));
+                self.restruct_remove(u);
+            } else {
+                //除顶层外，其余各层的任何单元，其节点数都>=2
+                //因为每当降至1时，就会触发单元合并
+                //故直接刷新其父节点merklesig即可
+                raw = Rc::into_raw(u) as *mut Node<V>;
+                unsafe {
+                    (*raw).merklesig = Some(self.merklesig_upper(&self.my_unit(Rc::clone(&node))));
+                    Rc::from_raw(raw);
+                }
+            }
+
+            //**如下进行单元合并**
+            //若所在单元只剩一个节点，则与其左右单元中节点数最少的一方进行合并
+            //若合并后新的单元已超限，则对其进行中值分裂
+            let adj = self.adjacent_statistics(Rc::clone(&node));
+            if 1 == adj.my_unit.len() {
+                let mut x;
+                let n = if adj.right_unit.len() < adj.left_unit.len() {
+                    if adj.right_unit.is_empty() {
+                        x = Rc::clone(&adj.my_unit[0]);
+                        rc_update!(^x, raw, Weak::new());
+                        //基于左单元最后一个节点即可，不必从左单元首节点开始
+                        self.parent_refresh(Rc::clone(&adj.left_unit[adj.left_unit.len() - 1]));
+                    } else {
+                        x = Rc::clone(&adj.right_unit[0]);
+                        rc_update!(^x, raw, Weak::new());
+                        self.parent_refresh(Rc::clone(&node));
+                    }
+                    x
+                } else if adj.right_unit.len() > adj.left_unit.len() {
+                    if adj.left_unit.is_empty() {
+                        x = Rc::clone(&adj.right_unit[0]);
+                        rc_update!(^x, raw, Weak::new());
+                        self.parent_refresh(Rc::clone(&node));
+                    } else {
+                        x = Rc::clone(&adj.my_unit[0]);
+                        rc_update!(^x, raw, Weak::new());
+                        //基于左单元最后一个节点即可，不必从左单元首节点开始
+                        self.parent_refresh(Rc::clone(&adj.left_unit[adj.left_unit.len() - 1]));
+                    }
+                    x
+                } else {
+                    //非顶层单元，左右邻同时为空是不可能的
+                    unreachable!();
+                };
+
+                //本单元及其所有非空邻接单元，必然存在父节点
+                let upper = Weak::upgrade(&n.upper).unwrap();
+
+                //删除临界节点的父节点并递归重塑之
+                self.remove_inner(Rc::clone(&upper));
+                self.restruct_remove(upper);
             } else {
                 return;
             }
         } else {
-            //顶层除根结点外，还存在其它结点，则不需要降低树高度
-            if self.root.as_ref().unwrap().right.is_some() {
+            //已到达顶层
+            let mut root = Rc::clone(&self.root.as_ref().unwrap());
+
+            if Rc::ptr_eq(&node, &root) {
+                self.root = root.right.clone();
+            }
+
+            if let Some(r) = self.root.as_ref() {
+                if r.right.is_some() {
+                    //顶层除根结点外，还存在其它结点，则不需要降低树高度
+                    return;
+                }
+                root = Rc::clone(r);
+            } else {
+                //若此时根结点为空，说明整个跳表已被清空
+                self.merklesig = None;
                 return;
             }
 
-            let mut root = Rc::clone(&self.root.as_ref().unwrap());
-            while let Some(l) = root.lower.as_ref() {
+            while let Some(lower) = root.lower.as_ref() {
                 //沿根节点垂直向下的所有节点，其左单元一定为空，无须判断
-                if 1 == self.my_unit(Rc::clone(l)).len() && self.right_unit(Rc::clone(l)).is_empty()
+                if 1 != self.my_unit(Rc::clone(lower)).len()
+                    || !self.right_unit(Rc::clone(lower)).is_empty()
                 {
-                    root = Rc::clone(l);
+                    root = Rc::clone(lower);
                     break;
                 }
             }
 
-            if let Some(l) = root.lower.as_ref() {
-                root = Rc::clone(l);
-            }
+            rc_update!(^root, raw, Weak::new());
+            self.parent_refresh(Rc::clone(&root));
 
-            //处理新的顶层结元
-            let mut n = Rc::clone(&root);
-            let mut raw = Rc::into_raw(n) as *mut Node<V>;
-            unsafe {
-                (*raw).upper = Weak::new();
-                n = Rc::from_raw(raw);
-            }
-            while let Some(r) = n.right.as_ref() {
-                raw = Rc::into_raw(Rc::clone(r)) as *mut Node<V>;
-                unsafe {
-                    (*raw).upper = Weak::new();
-                    n = Rc::from_raw(raw);
-                }
-            }
-
+            self.merklesig = Some(self.merklesig_upper(&self.my_unit(Rc::clone(&root))));
             self.root = Some(root);
             return;
         }
-
-        //should be a tail-recursion
-        self.restruct_remove(upper);
     }
 
     //- @head[in]: 每一层的首节点
@@ -774,7 +894,7 @@ impl<V: AsBytes> MCL<V> {
 
         //处理上层的首节点
         node = head;
-        sigbuf.push(Rc::clone(node.merklesig.as_ref().unwrap()));
+        sigbuf.push(node.merklesig.clone().unwrap());
         i += 1;
         let upper_head = Rc::new(Node {
             key: Rc::clone(&node.key),
@@ -788,16 +908,12 @@ impl<V: AsBytes> MCL<V> {
         let mut upper_tail = Rc::clone(&upper_head);
         upper_len += 1;
 
-        raw = Rc::into_raw(node) as *mut Node<V>;
-        unsafe {
-            (*raw).upper = Rc::downgrade(&upper_tail);
-            node = Rc::from_raw(raw);
-        }
+        rc_update!(^node, raw, Rc::downgrade(&upper_tail));
 
         //从左到右处理后续节点(若有)
         while let Some(r) = node.right.as_ref() {
             node = Rc::clone(r);
-            sigbuf.push(Rc::clone(node.merklesig.as_ref().unwrap()));
+            sigbuf.push(node.merklesig.clone().unwrap());
             i += 1;
 
             //添加上层节点
@@ -816,11 +932,7 @@ impl<V: AsBytes> MCL<V> {
             }
 
             //更改本层节点的upper指针
-            raw = Rc::into_raw(node) as *mut Node<V>;
-            unsafe {
-                (*raw).upper = Rc::downgrade(&upper_tail);
-                node = Rc::from_raw(raw);
-            }
+            rc_update!(^node, raw, Rc::downgrade(&upper_tail));
 
             //为上层节点计算merkle hashsig
             if unit_siz == i {
@@ -873,10 +985,12 @@ impl<V: AsBytes> MCL<V> {
         let unit = self.my_unit(Rc::clone(&cur));
         let sigs = unit
             .iter()
-            .map(|i| Rc::clone(i.merklesig.as_ref().unwrap()))
+            .map(|i| i.merklesig.clone().unwrap())
             .collect::<Vec<HashSig>>();
+
         path.push(ProofPath {
-            selfidx: sigs.binary_search(cur.merklesig.as_ref().unwrap()).unwrap(),
+            //merklesig并没有排序，不能采用对sigs使用二分查找的方式
+            selfidx: unit.iter().position(|x| x.key == cur.key).unwrap(),
             merklesigs: sigs,
         });
 
