@@ -3,42 +3,45 @@ macro_rules! source_type_test {
         mod $name {
             use super::super::*;
             use rand::random;
+            use std::collections::HashSet;
 
             pub fn rand() -> Vec<impl AsBytes> {
+                let mut hset = HashSet::new();
+                (0..500).for_each(|_| {
+                    hset.insert(random::<$type>());
+                });
                 let mut sample = vec![];
-                (0..500).for_each(|_| sample.push(random::<$type>()));
-                sample.sort();
-                sample.dedup();
+                hset.into_iter().for_each(|i| sample.push(i));
                 sample
             }
 
             pub fn rand_box() -> Vec<impl AsBytes> {
-                let mut sample = vec![];
+                let mut hset = HashSet::new();
                 (0..500).for_each(|_| {
-                    sample.push(
+                    hset.insert(
                         (0..10)
                             .into_iter()
                             .map(|_| random::<$type>())
                             .collect::<Box<[$type]>>(),
-                    )
+                    );
                 });
-                sample.sort();
-                sample.dedup();
+                let mut sample = vec![];
+                hset.into_iter().for_each(|i| sample.push(i));
                 sample
             }
 
             pub fn rand_vec() -> Vec<impl AsBytes> {
-                let mut sample = vec![];
+                let mut hset = HashSet::new();
                 (0..500).for_each(|_| {
-                    sample.push(
+                    hset.insert(
                         (0..10)
                             .into_iter()
                             .map(|_| random::<$type>())
                             .collect::<Vec<$type>>(),
-                    )
+                    );
                 });
-                sample.sort();
-                sample.dedup();
+                let mut sample = vec![];
+                hset.into_iter().for_each(|i| sample.push(i));
                 sample
             }
 
@@ -59,6 +62,15 @@ macro_rules! source_type_test {
                     assert_eq!(v, &mcl.get(h).unwrap());
                     assert!(mcl.proof(h).unwrap());
                 }
+
+                for (v, h) in sample.iter().zip(hashsigs.iter()) {
+                    assert_eq!(v, &*mcl.remove(h).unwrap().value);
+                    //assert!(mcl.get(h).is_none());
+                    //assert!(!mcl.proof(h).unwrap());
+                }
+
+                assert_eq!(0, mcl.item_cnt());
+                assert_eq!(mcl.item_cnt_realtime(), mcl.item_cnt());
             }
         }
 
