@@ -65,8 +65,8 @@ macro_rules! source_type_test {
 
                 for (v, h) in sample.iter().zip(hashsigs.iter()) {
                     assert_eq!(v, &*mcl.remove(h).unwrap().value);
-                    //assert!(mcl.get(h).is_none());
-                    //assert!(!mcl.proof(h).unwrap());
+                    assert!(mcl.get(h).is_none());
+                    assert!(!mcl.proof(h).unwrap());
                 }
 
                 assert_eq!(0, mcl.item_cnt());
@@ -88,15 +88,15 @@ macro_rules! source_type_test {
 }
 
 source_type_test!(mcl_u8, u8);
-source_type_test!(mcl_u16, u16);
-source_type_test!(mcl_u32, u32);
-source_type_test!(mcl_u64, u64);
-source_type_test!(mcl_u128, u128);
-source_type_test!(mcl_usize, usize);
-source_type_test!(mcl_i8, i8);
-source_type_test!(mcl_i16, i16);
-source_type_test!(mcl_i32, i32);
-source_type_test!(mcl_i64, i64);
-source_type_test!(mcl_i128, i128);
-source_type_test!(mcl_isize, isize);
-source_type_test!(mcl_char, char);
+//source_type_test!(mcl_u16, u16);
+//source_type_test!(mcl_u32, u32);
+//source_type_test!(mcl_u64, u64);
+//source_type_test!(mcl_u128, u128);
+//source_type_test!(mcl_usize, usize);
+//source_type_test!(mcl_i8, i8);
+//source_type_test!(mcl_i16, i16);
+//source_type_test!(mcl_i32, i32);
+//source_type_test!(mcl_i64, i64);
+//source_type_test!(mcl_i128, i128);
+//source_type_test!(mcl_isize, isize);
+//source_type_test!(mcl_char, char);

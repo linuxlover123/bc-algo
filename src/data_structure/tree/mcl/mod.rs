@@ -181,6 +181,11 @@ macro_rules! right_shift {
             old = fu;
             new = ru;
         }
+
+        //处理根节点
+        if Rc::ptr_eq($me.root.as_ref().unwrap(), &old) {
+            $me.root = Some(new);
+        }
     }
 }
 
@@ -231,7 +236,7 @@ impl<V: AsBytes> MCL<V> {
     ///#### 获取链表中所有元素的数量
     #[inline(always)]
     pub fn item_cnt_realtime(&self) -> usize {
-        if let Some(mut n) = self.get_lowest_first_node() {
+        if let Some(mut n) = self.get_lowest_root_node() {
             let mut i = 1;
             while let Some(r) = n.right.as_ref() {
                 i += 1;
@@ -268,7 +273,7 @@ impl<V: AsBytes> MCL<V> {
     ///- @key[in]: 将要被移除的目标节点的键
     #[inline(always)]
     pub fn remove(&mut self, key: &[u8]) -> Result<Rc<Node<V>>, XErr<V>> {
-        let node = self.get_inner(key)?;
+        let node = Self::get_lowest_node(self.get_inner(key)?);
         self.remove_inner(Rc::clone(&node));
         self.item_cnt -= 1;
         Ok(node)
@@ -293,6 +298,7 @@ impl<V: AsBytes> MCL<V> {
                 let mut new;
                 let mut raw;
                 if let Some(n) = n {
+                    let n = Self::get_lowest_node(n);
                     let mut node = Node {
                         key: Rc::clone(&sig),
                         value: Rc::new(value),
@@ -314,7 +320,7 @@ impl<V: AsBytes> MCL<V> {
 
                     self.restruct_split(new); //重塑链表结构
                 } else if self.root.is_some() {
-                    let mut lowest = self.get_lowest_first_node().unwrap();
+                    let mut lowest = self.get_lowest_root_node().unwrap();
                     new = Rc::new(Node {
                         key: Rc::clone(&sig),
                         value: Rc::new(value),
@@ -442,12 +448,22 @@ impl<V: AsBytes> MCL<V> {
 
     //#### 获取最底一层的首节点
     #[inline(always)]
-    fn get_lowest_first_node(&self) -> Option<Rc<Node<V>>> {
+    fn get_lowest_root_node(&self) -> Option<Rc<Node<V>>> {
         let mut lowest = Rc::clone(self.root.as_ref()?);
         while let Some(l) = lowest.lower.as_ref() {
             lowest = Rc::clone(l);
         }
         Some(lowest)
+    }
+
+    //#### 获取最底一层的首节点
+    #[inline(always)]
+    fn get_lowest_node(node: Rc<Node<V>>) -> Rc<Node<V>> {
+        let mut lowest = node;
+        while let Some(l) = lowest.lower.as_ref() {
+            lowest = Rc::clone(l);
+        }
+        lowest
     }
 
     //#### 查询数据
@@ -531,7 +547,7 @@ impl<V: AsBytes> MCL<V> {
 
         if let Some(r) = self.root.as_ref() {
             root = Rc::clone(r);
-            if r.right.is_some() {
+            if root.right.is_some() {
                 //顶层除根结点外，还存在其它结点，则不需要降低树高度
                 //更新全局merklesig后返回
                 self.merklesig = Some(self.merklesig_upper(&self.my_unit(root)));
@@ -544,10 +560,8 @@ impl<V: AsBytes> MCL<V> {
         }
 
         while let Some(lower) = root.lower.as_ref() {
-            //沿根节点垂直向下的所有节点，其左单元一定为空，无须判断
-            if 1 != self.my_unit(Rc::clone(lower)).len()
-                || !self.right_unit(Rc::clone(lower)).is_empty()
-            {
+            //沿根节点垂直向下去除孤儿层
+            if 1 < self.my_unit(Rc::clone(lower)).len() {
                 root = Rc::clone(lower);
                 break;
             }
@@ -575,10 +589,10 @@ impl<V: AsBytes> MCL<V> {
                 update!(->l, raw, Some(Rc::clone(&r)));
                 update!(<-r, raw, Rc::downgrade(&l));
 
-                //使用循环一次性将首节点所在垂直线全部处理完，
-                //非顶层的各层首节点，其所在单元不可能只有一个节点，
-                //即其右兄弟一定与其在同一单元，故直接用右侧节点替代之即可
                 let adj = if self.is_first_node(Rc::clone(&node)) {
+                    //使用循环一次性将首节点所在垂直线全部处理完，
+                    //非顶层的各层首节点，其所在单元不可能只有一个节点，
+                    //即其右兄弟一定与其在同一单元，故直接用右侧节点替代之即可
                     right_shift!(self, raw, node, Rc::clone(&r));
 
                     //若被删节点是所在单元的首节点，则其右兄弟一定与其在同一单元内
@@ -592,15 +606,6 @@ impl<V: AsBytes> MCL<V> {
                 self.merkle_refresh(Rc::clone(&adj.my_unit[0]));
 
                 if 1 == adj.my_unit.len() {
-                    //左右单元满员或超限，则首先对其进行分裂
-                    //restruct_split函数内部会处理因分裂受影的merkle路径
-                    if adj.right_unit.len() >= self.unit_maxsiz {
-                        self.restruct_split(Rc::clone(&adj.right_unit[0]));
-                    }
-                    if adj.left_unit.len() >= self.unit_maxsiz {
-                        self.restruct_split(Rc::clone(&adj.left_unit[0]));
-                    }
-
                     //选左右单元中节点数量较少者合并，
                     let mut x;
                     node_next = if adj.right_unit.len() < adj.left_unit.len() {
@@ -629,10 +634,26 @@ impl<V: AsBytes> MCL<V> {
                             self.merkle_refresh(Rc::clone(&adj.my_unit[0]));
                         }
                         x
+                    } else if !adj.right_unit.is_empty() {
+                        //左右单元内节点数量相等，且都不为空，默认执行右向合并
+                        x = Weak::upgrade(&adj.right_unit[0].upper).unwrap();
+                        update!(@^Rc::clone(&adj.right_unit[0]), raw, Weak::clone(&adj.my_unit[0].upper));
+                        self.parent_refresh(Rc::clone(&adj.right_unit[0]));
+                        self.merkle_refresh(Rc::clone(&adj.right_unit[0]));
+                        x
                     } else {
                         //非顶层单元，左右邻同时为空是不可能的
                         unreachable!();
-                    }; //进入下一轮递归
+                    };
+
+                    //左右单元满员或超限，则对其进行分裂
+                    //restruct_split函数内部会处理因分裂受影的merkle路径
+                    if adj.right_unit.len() >= self.unit_maxsiz {
+                        self.restruct_split(Rc::clone(&adj.right_unit[0]));
+                    }
+                    if adj.left_unit.len() >= self.unit_maxsiz {
+                        self.restruct_split(Rc::clone(&adj.left_unit[0]));
+                    } //进入下一轮递归
                 } else {
                     //既然无需合并，则不会产生下一个需要删除的节点，
                     //停止递归
@@ -656,18 +677,18 @@ impl<V: AsBytes> MCL<V> {
                 self.merkle_refresh(Rc::clone(&adj.my_unit[0]));
 
                 //只需判断是否需要右向合并即可
-                if 1 == adj.my_unit.len() {
-                    //右向合并之前，检测右侧单元容量，若满员或超限，则首先对其进行分裂
-                    //restruct_split函数内部会处理因分裂受影的merkle路径
-                    if adj.right_unit.len() >= self.unit_maxsiz {
-                        self.restruct_split(Rc::clone(&adj.right_unit[0]));
-                    }
-
+                if 1 == adj.my_unit.len() && !adj.right_unit.is_empty() {
                     node_next = Weak::upgrade(&adj.right_unit[0].upper).unwrap();
 
                     update!(@^Rc::clone(&adj.right_unit[0]), raw, Weak::clone(&r.upper));
                     self.parent_refresh(Rc::clone(&adj.right_unit[0]));
-                    self.merkle_refresh(r); //进入下一轮递归
+                    self.merkle_refresh(r);
+
+                    //检测右侧单元容量，若满员或超限，则对其进行分裂
+                    //restruct_split函数内部会处理因分裂受影的merkle路径
+                    if adj.right_unit.len() >= self.unit_maxsiz {
+                        self.restruct_split(Rc::clone(&adj.right_unit[0]));
+                    } //进入下一轮递归
                 } else {
                     //既然无需合并，则不会产生下一个需要删除的节点，
                     //停止递归
@@ -687,27 +708,27 @@ impl<V: AsBytes> MCL<V> {
                 self.merkle_refresh(Rc::clone(&adj.my_unit[0]));
 
                 //只需判断是否需要左向合并即可
-                if 1 == adj.my_unit.len() {
-                    //左向合并之前，检测左侧单元容量，若满员或超限，则首先对其进行分裂
-                    //restruct_split函数内部会处理因分裂受影的merkle路径
-                    if adj.left_unit.len() >= self.unit_maxsiz {
-                        self.restruct_split(Rc::clone(&adj.left_unit[0]));
-                    }
-
+                if 1 == adj.my_unit.len() && !adj.left_unit.is_empty() {
                     node_next = Weak::upgrade(&adj.my_unit[0].upper).unwrap();
 
                     update!(@^Rc::clone(&adj.my_unit[0]), raw, Weak::clone(&adj.left_unit[0].upper));
                     self.parent_refresh(Rc::clone(&adj.my_unit[0]));
-                    self.merkle_refresh(l); //进入下一轮递归
+                    self.merkle_refresh(l);
+
+                    //检测左侧单元容量，若满员或超限，则对其进行分裂
+                    //restruct_split函数内部会处理因分裂受影的merkle路径
+                    if adj.left_unit.len() >= self.unit_maxsiz {
+                        self.restruct_split(Rc::clone(&adj.left_unit[0]));
+                    } //进入下一轮递归
                 } else {
                     //既然无需合并，则不会产生下一个需要删除的节点，
                     //停止递归
                     return;
                 }
             } else {
-                //左右兄弟皆为空，说明删除的是节点总数为1的链表的唯一节点，
-                //而非顶层节点不可能出现这种情况
-                unreachable!();
+                //行至此处，只有一种可能：自当前节点向上，至根节点，已经是单线相传
+                self.remove_inner_top_layer(Rc::clone(self.root.as_ref().unwrap()));
+                return;
             }
         } else {
             //已到达顶层，做最后的处理，之后返回
@@ -927,7 +948,7 @@ impl<V: AsBytes> MCL<V> {
     //- #: 按从叶到根的順序排列的哈希集合，使用proof函数验证
     //- @key[in]: 查找对象
     fn get_proof_path(&self, key: &[u8]) -> Result<Vec<ProofPath>, XErr<V>> {
-        let n = self.get_inner(key)?;
+        let n = Self::get_lowest_node(self.get_inner(key)?);
         let mut path = vec![];
         self.get_proof_path_r(n, &mut path);
         Ok(path)
