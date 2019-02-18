@@ -144,54 +144,6 @@ macro_rules! update {
     };
 }
 
-macro_rules! right_shift {
-    ($me: expr, $raw: expr, $old: expr, $new: expr) => {
-        let mut old = $old;
-        let mut fu;
-        let mut new = $new;
-        let mut ru;
-
-        while $me.is_first_node(Rc::clone(&old)) {
-            if let Some(ou) = Weak::upgrade(&old.upper) {
-                fu = ou;
-            } else {
-                break;
-            }
-
-            ru = Rc::new(Node {
-                key: Rc::clone(&new.key),
-                value: Rc::clone(&new.value),
-                merklesig: None,
-                upper: Weak::clone(&fu.upper),
-                lower: Some(Rc::clone(&new)),
-                left: Weak::clone(&fu.left),
-                right: fu.right.clone(),
-            });
-
-            update!(@^Rc::clone(&new), $raw, Rc::downgrade(&ru));
-
-            if let Some(l) = Weak::upgrade(&fu.left) {
-                update!(@->l, $raw, Some(Rc::clone(&ru)));
-            }
-
-            if let Some(r) = fu.right.as_ref() {
-                update!(@<-Rc::clone(r), $raw, Rc::downgrade(&ru));
-            }
-
-            //MUST !!!
-            $me.parent_refresh(new);
-
-            old = fu;
-            new = ru;
-        }
-
-        //若老的根节点被删，则更新根节点
-        if Rc::ptr_eq($me.root.as_ref().unwrap(), &old) {
-            $me.root = Some(new);
-        }
-    }
-}
-
 impl<V: AsBytes> MCL<V> {
     ///#### 初始化
     ///- @unit_maxsiz[in]: 必须是不小于4的整数，元素数量超过此值将进行单元分裂
@@ -277,7 +229,7 @@ impl<V: AsBytes> MCL<V> {
     #[inline(always)]
     pub fn remove(&mut self, key: &[u8]) -> Result<Rc<Node<V>>, XErr<V>> {
         let node = Self::get_lowest_node(self.get_inner(key)?);
-        self.remove_inner(Rc::clone(&node));
+        self.del(Rc::clone(&node));
         self.item_cnt -= 1;
         Ok(node)
     }
@@ -544,93 +496,139 @@ impl<V: AsBytes> MCL<V> {
 
     //#### 删除数据，并按需调整整体的数据结构
     //- @node[in]: 将要被移除的目标节点
-    fn remove_inner(&mut self, node: Rc<Node<V>>) {
-        let node_next;
-        if Weak::upgrade(&node.upper).is_some() {
-            let mut raw;
+    fn del(&mut self, node: Rc<Node<V>>) {
+        let mut raw;
+
+        if let Some(l) = Weak::upgrade(&node.left) {
+            update!(@->l, raw, node.right.clone());
+        }
+        if let Some(r) = node.right.as_ref().map(|r| Rc::clone(r)) {
+            update!(@<-r, raw, Weak::clone(&node.left));
+        }
+
+        let mut adj;
+        if self.is_first_node(Rc::clone(&node)) {
             if let Some(l) = Weak::upgrade(&node.left) {
-                update!(@->l, raw, node.right.clone());
-            }
+                //左单元存在，说明被删的节点不属于根节点所在垂直线
+                self.parent_refresh(Rc::clone(&l));
+                adj = self.adjacent_statistics(l);
 
-            if let Some(r) = node.right.as_ref().map(|r| Rc::clone(r)) {
-                update!(@<-r, raw, Weak::clone(&node.left));
-            }
+                //使用递归，保证先统一向上删除，然后再统一向下分裂
+                let mut n = node;
+                while let Some(u) = Weak::upgrade(&n.upper) {
+                    if self.is_first_node(Rc::clone(&u)) {
+                        self.del(Rc::clone(&u));
+                        n = u;
+                    } else {
+                        break;
+                    }
+                }
 
-            let adj = if self.is_first_node(Rc::clone(&node)) {
-                //非顶层的各层首节点，其所在单元不可能只有一个节点，
-                //即其右兄弟一定与其在同一单元，故直接用右侧节点替代之即可
-                let r = Rc::clone(node.right.as_ref().unwrap());
+                if self.unit_maxsiz <= adj.my_unit.len() {
+                    self.restruct_split(Rc::clone(&adj.my_unit[0]));
+                }
+            } else if let Some(nr) = node.right.as_ref() {
+                //左单元不存在，说明被删的节点位于根节点所在垂直线
+                let mut n = Rc::clone(&node);
+                let mut r = Rc::clone(nr);
+                while let Some(u) = Weak::upgrade(&n.upper) {
+                    if self.is_first_node(Rc::clone(&r)) {
+                        //未至顶层，且node的右节点是所在单元的首节点，
+                        //在删除根节点所在垂直线的节点时，会导致这种情况，
+                        //此时无需处理，直接进入上一层即可
+                    } else {
+                        //未至顶层，且node的右节点不是所在单元的首节点，
+                        //以node的右节点为单元首节点，新建一个父节点
+                        let ru = Rc::new(Node {
+                            key: Rc::clone(&r.key),
+                            value: Rc::clone(&r.value),
+                            merklesig: None,
+                            upper: Weak::new(),
+                            lower: Some(Rc::clone(&r)),
+                            left: Weak::clone(&u.left),
+                            right: u.right.clone(),
+                        });
 
-                //使用循环一次性将首节点所在垂直线全部处理完，
-                right_shift!(self, raw, node, Rc::clone(&r));
+                        update!(@^Rc::clone(&r), raw, Rc::downgrade(&ru));
 
-                //对于非顶层节点，若被删节点是所在单元的首节点，
-                //则其右兄弟一定存在，且与其在同一单元内
-                self.adjacent_statistics(r)
+                        if let Some(l) = Weak::upgrade(&u.left) {
+                            update!(@->l, raw, Some(Rc::clone(&ru)));
+                        }
+
+                        if let Some(r) = u.right.as_ref() {
+                            update!(@<-Rc::clone(r), raw, Rc::downgrade(&ru));
+                        }
+
+                        self.parent_refresh(r);
+                    }
+
+                    n = u;
+                    r = n.right.clone().unwrap();
+                }
+
+                //已至顶层，无需执行parent_refresh(_)，其下各层也无需分裂，
+                //将根节点及全局merklesig替换掉即可
+                self.root = Some(Rc::clone(&r));
+                self.merkle_refresh(Rc::clone(nr));
+                return;
             } else {
-                //对于非顶层节点，若被删节点非所在单元的首节点，
-                //则其左兄弟一定存在，且与其在同一单元内
-                self.adjacent_statistics(Weak::upgrade(&node.left).unwrap())
-            };
-
-            //刷新受影响的merkle路径
-            self.merkle_refresh(Rc::clone(&adj.my_unit[0]));
-
-            if 1 == adj.my_unit.len() {
-                node_next = self.restruct_merge(adj); //进入下一轮递归
-            } else {
-                //既然无需合并，则不会产生下一个需要删除的节点，
-                //停止递归
+                //左右无值，说明整个跳表已被清空
+                self.root = None;
+                self.merklesig = None;
                 return;
             }
         } else {
-            //已到达顶层，做最后的处理，之后返回
-            self.remove_inner_top_layer(node);
+            //被删节点不是单元首节点，
+            //其左节点必然存在，且与其处于同一单元
+            let l = Weak::upgrade(&node.left).unwrap();
+            adj = self.adjacent_statistics(Rc::clone(&l));
+
+            self.merkle_refresh(l);
+        }
+
+        //无左右邻接单元，必然处于顶层，则无需合并
+        if adj.left_unit.is_empty() && adj.right_unit.is_empty() {
             return;
         }
 
-        //should be a tail-recursion
-        self.remove_inner(node_next);
+        //单元合并
+        if 1 == adj.my_unit.len() {
+            let next = self.restruct_merge(adj);
+            self.del(next);
+        }
     }
 
+    //#### 单元合并
     fn restruct_merge(&mut self, adj: Adjacency<V>) -> Rc<Node<V>> {
         let mut node_next;
         let mut raw;
+
         //选左右单元中节点数量较少者合并，
-        if adj.right_unit.len() < adj.left_unit.len() {
+        let (to_merge, base) = if adj.right_unit.len() < adj.left_unit.len() {
             if adj.right_unit.is_empty() {
-                node_next = Weak::upgrade(&adj.my_unit[0].upper).unwrap();
-                update!(@^Rc::clone(&adj.my_unit[0]), raw, Weak::clone(&adj.left_unit[0].upper));
-                self.parent_refresh(Rc::clone(&adj.my_unit[0]));
-                self.merkle_refresh(Rc::clone(&adj.my_unit[0]));
+                (&adj.my_unit[0], &adj.left_unit[0])
             } else {
-                node_next = Weak::upgrade(&adj.right_unit[0].upper).unwrap();
-                update!(@^Rc::clone(&adj.right_unit[0]), raw, Weak::clone(&adj.my_unit[0].upper));
-                self.parent_refresh(Rc::clone(&adj.right_unit[0]));
-                self.merkle_refresh(Rc::clone(&adj.right_unit[0]));
+                (&adj.right_unit[0], &adj.my_unit[0])
             }
         } else if adj.right_unit.len() > adj.left_unit.len() {
             if adj.left_unit.is_empty() {
-                node_next = Weak::upgrade(&adj.right_unit[0].upper).unwrap();
-                update!(@^Rc::clone(&adj.right_unit[0]), raw, Weak::clone(&adj.my_unit[0].upper));
-                self.parent_refresh(Rc::clone(&adj.right_unit[0]));
-                self.merkle_refresh(Rc::clone(&adj.right_unit[0]));
+                (&adj.right_unit[0], &adj.my_unit[0])
             } else {
-                node_next = Weak::upgrade(&adj.my_unit[0].upper).unwrap();
-                update!(@^Rc::clone(&adj.my_unit[0]), raw, Weak::clone(&adj.left_unit[0].upper));
-                self.parent_refresh(Rc::clone(&adj.my_unit[0]));
-                self.merkle_refresh(Rc::clone(&adj.my_unit[0]));
+                (&adj.my_unit[0], &adj.left_unit[0])
             }
         } else if !adj.right_unit.is_empty() {
             //左右单元内节点数量相等，且都不为空，默认执行右向合并
-            node_next = Weak::upgrade(&adj.right_unit[0].upper).unwrap();
-            update!(@^Rc::clone(&adj.right_unit[0]), raw, Weak::clone(&adj.my_unit[0].upper));
-            self.parent_refresh(Rc::clone(&adj.right_unit[0]));
-            self.merkle_refresh(Rc::clone(&adj.right_unit[0]));
+            (&adj.right_unit[0], &adj.my_unit[0])
         } else {
-            //非顶层单元，左右邻同时为空是不可能的
+            //上层调用方已确保左右邻不同时为空
             unreachable!();
-        }
+        };
+
+        //确定新的待删节点，并刷新受影响的数据
+        node_next = Weak::upgrade(&to_merge.upper).unwrap();
+        update!(@^Rc::clone(to_merge), raw, Weak::clone(&base.upper));
+        self.parent_refresh(Rc::clone(to_merge));
+        self.merkle_refresh(Rc::clone(to_merge));
 
         //左右单元满员或超限，则对其进行分裂
         //restruct_split函数内部会处理因分裂受影的merkle路径
@@ -642,39 +640,6 @@ impl<V: AsBytes> MCL<V> {
         }
 
         node_next
-    }
-
-    fn remove_inner_top_layer(&mut self, node: Rc<Node<V>>) {
-        let mut raw;
-        let mut root = Rc::clone(&self.root.as_ref().unwrap());
-
-        //处理根节点被删的情况
-        if Rc::ptr_eq(&node, &root) {
-            self.root = root.right.clone();
-        }
-
-        if let Some(r) = self.root.as_ref() {
-            root = Rc::clone(r);
-            //顶层除根结点外，还存在其它结点，则不需要降低树高度
-            if root.right.is_none() {
-                while let Some(lower) = root.lower.as_ref() {
-                    //沿根节点垂直向下去除孤儿层
-                    if lower.right.is_some() {
-                        root = Rc::clone(lower);
-                        break;
-                    }
-                }
-                update!(^root, raw, Weak::new());
-                self.parent_refresh(Rc::clone(&root));
-                self.root = Some(Rc::clone(&root));
-            }
-            self.merklesig = Some(self.merklesig_upper(&self.my_unit(root)));
-            return;
-        } else {
-            //若此时根结点为空，说明整个跳表已被清空
-            self.merklesig = None;
-            return;
-        }
     }
 
     //#### 根据子节点集合，生成父节点的merklesig
