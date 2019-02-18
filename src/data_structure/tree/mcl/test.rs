@@ -63,6 +63,20 @@ macro_rules! source_type_test {
                     assert!(mcl.proof(h).unwrap());
                 }
 
+                //测试有序性
+                let mut hashsigs2 = hashsigs.clone();
+                hashsigs2.sort();
+                let mut node = MCL::get_lowest_node(mcl.get_inner(&hashsigs2[0]).unwrap());
+                let mut left = Rc::clone(&node);
+                assert!(Weak::upgrade(&node.left).is_none());
+                for h in &hashsigs2[1..] {
+                    dbg!(1);
+                    node = MCL::get_lowest_node(mcl.get_inner(h).unwrap());
+                    assert!(Rc::ptr_eq(&left, &Weak::upgrade(&node.left).unwrap()));
+                    left = Rc::clone(&node);
+                }
+
+                //测试移除后的成确性
                 for (v, h) in sample.iter().zip(hashsigs.iter()) {
                     assert_eq!(v, &*mcl.remove(h).unwrap().value);
                     assert!(mcl.get(h).is_none());
