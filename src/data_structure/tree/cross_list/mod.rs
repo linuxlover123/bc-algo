@@ -217,6 +217,15 @@ impl<K: Key, V: Clone> CrossList<K, V> {
     ///#### Error:
     ///-
     pub fn remove(&mut self, key: &K) -> Result<Rc<Node<K, V>>, XErr<K, V>> {
+        //左右互联
+        //有下,全部弹出,所有子节点的upper置为None
+        //
+        //判定身份,若为孤儿节点,则结束
+        //
+        //若非孤儿节点,
+        //则检查最近的一侧,是否有孤儿节点可供移入,
+        //    若有,移入,结束
+        //    若无,检查另一侧是否有孤儿节点,若有,以新的中值节点替换父节点,之后移入这一侧的孤儿节点
         let mut raw;
         let mut node = self.query(&key)?;
 
@@ -350,44 +359,78 @@ impl<K: Key, V: Clone> CrossList<K, V> {
             /* 左右邻的父节点都存在,且具有共同的父节点,
              * 则需要首先调整父节点的children,之后返回一个合适的孤儿节点
              */
-            let upper = lu.unwrap();
-            let idx = upper
-                .children
-                .binary_search_by(|n| n.key.cmp(&node.key))
-                .unwrap_err();
-
-            //新节点已脱离孤儿节点身份,更新其父节点的值
-            chg!(@Rc::clone(&node), upper, Some(Rc::clone(&upper)));
-
-            //确保任一children不为空的节点,其key在children的keys中永远是`中值`,
-            //children只有两种状态: 要么满员,要么为空
-            let mut n;
-            let raw = Rc::into_raw(upper) as *mut Node<K, V>;
-            if idx >= self.right_part_start_idx {
-                unsafe {
-                    n = (*raw).children.pop().unwrap(); //被弹出的节点不会被系统drop
-                    (*raw).children.insert(idx, node);
-                    Rc::from_raw(raw);
-                }
-            } else {
-                unsafe {
-                    n = Rc::clone(get!(@(*raw).children, 0));
-                    for i in 1..self.right_part_start_idx {
-                        *set!(@(*raw).children, i - 1) = Rc::clone(get!(@(*raw).children, i)); //被覆盖的首节点不会被系统drop
-                    }
-                    *set!(@(*raw).children, idx) = node;
-                    Rc::from_raw(raw);
-                }
-            }
-
-            //被弹出的节点已成为孤儿节点,须将其父节点置为None
-            chg!(n, upper, None);
-            n
+            self.shift_out(lu.unwrap(), node)
         } else {
             node
         };
 
         self.push_up(n);
+    }
+
+    //> 删除节点后,首先尝试寻找左右孤儿节点移入,若无可移入的孤儿节点,则将父节点拉低到其下一层,
+    //- @node[in]: 被删除的节点(位于upper的children中)
+    fn ops_after_remove(&self, upper: Rc<Node<K, V>>, node: Rc<Node<K, V>>) {
+        //if 存在可移入对象 {
+        //    //判定将被移入孤儿节点的来源方向,按需调用近端或远端shift函数
+        //} else {
+        //    //拉低父节点
+        //}
+    }
+
+    //> 近端存在孤儿节点,移入即可,无需调节父节点
+    //- @node[in]: 近端最近孤儿节点
+    #[inline(always)]
+    fn shift_in_near_end(&self, upper: Rc<Node<K, V>>, node: Rc<Node<K, V>>) {}
+
+    //> 远端存在孤儿节点(近端不存在),不能直接移入,
+    //> 首先以新的中值节点与父节点位置互换,
+    //> 然后再移入远端的孤儿节点
+    //- @node[in]: 远端最近孤儿节点
+    #[inline(always)]
+    fn shift_in_far_end(&self, upper: Rc<Node<K, V>>, node: Rc<Node<K, V>>) {}
+
+    //> 在删除节点后,并且被删节点所在单元节点数已小于单元容量时执行,
+    //> 基于被删节点,将其父节点接低到其下一层(即:先从其原属层删除,然后再插入到其下一层),
+    fn pull_down(&self, node: Rc<Node<K, V>>) {}
+
+    //> 若新增的节点是插入在某个父节点的children之中,
+    //> 则需将原有的最左端或最右端的节点弹出为孤儿节点
+    //- #: 新弹出的孤儿节点
+    //- @node: new created node
+    #[inline(always)]
+    fn shift_out(&self, upper: Rc<Node<K, V>>, node: Rc<Node<K, V>>) -> Rc<Node<K, V>> {
+        let idx = upper
+            .children
+            .binary_search_by(|n| n.key.cmp(&node.key))
+            .unwrap_err();
+
+        //新节点已脱离孤儿节点身份,更新其父节点的值
+        chg!(@Rc::clone(&node), upper, Some(Rc::clone(&upper)));
+
+        //确保任一children不为空的节点,其key在children的keys中永远是`中值`,
+        //children只有两种状态: 要么满员,要么为空
+        let mut n;
+        let raw = Rc::into_raw(upper) as *mut Node<K, V>;
+        if idx >= self.right_part_start_idx {
+            unsafe {
+                n = (*raw).children.pop().unwrap(); //被弹出的节点不会被系统drop
+                (*raw).children.insert(idx, node);
+                Rc::from_raw(raw);
+            }
+        } else {
+            unsafe {
+                n = Rc::clone(get!(@(*raw).children, 0));
+                for i in 1..self.right_part_start_idx {
+                    *set!(@(*raw).children, i - 1) = Rc::clone(get!(@(*raw).children, i)); //被覆盖的首节点不会被系统drop
+                }
+                *set!(@(*raw).children, idx) = node;
+                Rc::from_raw(raw);
+            }
+        }
+
+        //被弹出的节点已成为孤儿节点,须将其父节点置为None
+        chg!(n, upper, None);
+        n
     }
 
     //> 在插入新节点后执行,
@@ -476,11 +519,6 @@ impl<K: Key, V: Clone> CrossList<K, V> {
 
         None
     }
-
-    //> 在删除节点后,并且被删节点所在单元节点数已小于单元容量时执行,
-    //> 基于被删节点,将其父节点接低到其下一层(即:先从其原属层删除,然后再插入到其下一层),
-    //> 此时暂不转换Vec<_>为纯链表形式,若后续再从其中删一个节点,再行转换
-    fn pull_down(&self) {}
 }
 
 //`读`接口
