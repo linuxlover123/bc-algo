@@ -355,11 +355,14 @@ impl<K: Key, V: Clone> CrossList<K, V> {
                 .children
                 .binary_search_by(|n| n.key.cmp(&node.key))
                 .unwrap_err();
-            let raw = Rc::into_raw(upper) as *mut Node<K, V>;
-            let n;
+
+            //新节点已脱离孤儿节点身份,更新其父节点的值
+            chg!(@Rc::clone(&node), upper, Some(Rc::clone(&upper)));
 
             //确保任一children不为空的节点,其key在children的keys中永远是`中值`,
             //children只有两种状态: 要么满员,要么为空
+            let mut n;
+            let raw = Rc::into_raw(upper) as *mut Node<K, V>;
             if idx >= self.right_part_start_idx {
                 unsafe {
                     n = (*raw).children.pop().unwrap(); //被弹出的节点不会被系统drop
@@ -376,6 +379,9 @@ impl<K: Key, V: Clone> CrossList<K, V> {
                     Rc::from_raw(raw);
                 }
             }
+
+            //被弹出的节点已成为孤儿节点,须将其父节点置为None
+            chg!(n, upper, None);
             n
         } else {
             node
